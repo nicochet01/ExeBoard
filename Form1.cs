@@ -1,4 +1,5 @@
-using System;
+Ôªøusing System;
+using System.Collections.Generic; // Adicionado explicitamente
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -7,42 +8,40 @@ using System.Runtime.InteropServices;
 using System.ServiceProcess;
 using System.Text;
 using System.Windows.Forms;
+using System.Linq; // Adicionado explicitamente
+using System.Threading; // Adicionado para Thread.Sleep
+using System.Threading.Tasks; // Adicionado para Task
 using Microsoft.VisualBasic;
-using static System.Windows.Forms.DataFormats;
 
-namespace ExeBoard {
+namespace ExeBoard
+{
 
     public partial class frmCopiarExes : Form
     {
         private void RepopularLogs(Color? filtroCor = null)
         {
-            rtbLog.Clear(); // Limpa a tela
+            rtbLog.Clear();
 
             List<LogEntry> logsParaExibir;
 
-            // Trava a lista mestra para fazer uma cÛpia segura
             lock (listaDeLogs)
             {
                 if (filtroCor == null)
                 {
-                    // Pega todos os logs
                     logsParaExibir = new List<LogEntry>(listaDeLogs);
                 }
                 else
                 {
-                    // Pega apenas os logs que batem com a cor do filtro
                     logsParaExibir = listaDeLogs.Where(log => log.Cor == filtroCor).ToList();
                 }
             }
 
-            // Agora desenha os logs filtrados na tela
             foreach (var logEntry in logsParaExibir)
             {
                 AnexarLogAoRtb(logEntry.Mensagem, logEntry.Cor);
             }
         }
 
-        // Este mÈtodo auxiliar APENAS desenha na tela
         private void AnexarLogAoRtb(string mensagem, Color cor)
         {
             if (rtbLog.InvokeRequired)
@@ -61,23 +60,21 @@ namespace ExeBoard {
             rtbLog.ScrollToCaret();
         }
 
-        // Lista mestra que armazena TODOS os logs
         private List<LogEntry> listaDeLogs = new List<LogEntry>();
 
         private bool configuracoesForamAlteradas = false;
 
-        // Importa a funÁ„o do Windows para LER arquivos INI
+        private bool forcarFechamento = false;
+
         [DllImport("kernel32")]
         private static extern int GetPrivateProfileString(string section, string key, string def, StringBuilder retVal, int size, string filePath);
 
-        // Importa a funÁ„o do Windows para ESCREVER arquivos INI
         [DllImport("kernel32")]
         private static extern long WritePrivateProfileString(string section, string key, string val, string filePath);
 
+        // CORRE√á√ÉO: Uso de AppContext.BaseDirectory para Single File
+        string caminhoIni = Path.Combine(AppContext.BaseDirectory, "Inicializar.ini");
 
-        string caminhoIni = Application.StartupPath + @"\Inicializar.ini";
-
-        // Estrutura para armazenar cada entrada de log com sua cor
         private class LogEntry
         {
             public string Mensagem { get; set; }
@@ -87,18 +84,16 @@ namespace ExeBoard {
         public frmCopiarExes()
         {
             VerificarECriarIniSeNaoExistir();
-
             InitializeComponent();
         }
 
         private void VerificarECriarIniSeNaoExistir()
         {
-            // Verifica se o arquivo .ini N√O existe no caminho esperado
             if (!System.IO.File.Exists(caminhoIni))
             {
                 try
                 {
-                    // Cria um conte˙do padr„o para o arquivo .ini, com as seÁıes principais vazias.
+                    // CAMINHOS PADR√ÉO DEFINIDOS AQUI
                     string conteudoPadrao =
                         "[CONFIG_GERAIS]\n" +
                         "RODAR_NA_BANDEJA=Sim\n\n" +
@@ -107,10 +102,10 @@ namespace ExeBoard {
                         "DE_PASTA_CLIENT=EXES\n" +
                         "DE_PASTA_SERVER=EXES\n" +
                         "DE_PASTA_DADOS=BD\n" +
-                        "PARA=C:\\\n" +
-                        "PASTA_CLIENT=Client\n" +
-                        "PASTA_SERVER=Server\n" +
-                        "PASTA_DADOS=Dados\n\n" +
+                        "PARA=C:\\\n" + // Raiz padr√£o
+                        "PASTA_CLIENT=C:\\Viasoft\\Client\n" + // Padr√£o solicitado
+                        "PASTA_SERVER=C:\\Viasoft\\Server\n" + // Padr√£o solicitado
+                        "PASTA_DADOS=C:\\Viasoft\\Dados\n\n" + // Padr√£o solicitado
                         "[APLICACOES_CLIENTE]\n" +
                         "Count=0\n\n" +
                         "[APLICACOES_SERVIDORAS]\n" +
@@ -118,24 +113,21 @@ namespace ExeBoard {
                         "[BANCO_DE_DADOS]\n" +
                         "Count=0\n\n" +
                         "[ATUALIZADORES]\n" +
-                        "Count=0\n";
+                        "Count=0\n" +
+                        "[ULTIMOS_CAMINHOS]\n" +
+                        "UltimoCaminhoClientes=C:\\Viasoft\\Client\n" +
+                        "UltimoCaminhoServidores=C:\\Viasoft\\Server\n" +
+                        "UltimoCaminhoAtualizadores=C:\\Viasoft\\Dados\n";
 
-                    // Escreve o conte˙do padr„o no novo arquivo .ini
                     System.IO.File.WriteAllText(caminhoIni, conteudoPadrao);
 
-                    // Avisa ao usu·rio (opcional, mas bom para a primeira execuÁ„o)
-                    MessageBox.Show("Arquivo 'Inicializar.ini' n„o encontrado. Um novo arquivo de configuraÁ„o foi criado.",
-                                    "Aviso",
-                                    MessageBoxButtons.OK,
-                                    MessageBoxIcon.Information);
+                    // Aviso de Boas-vindas (UX)
+                    MessageBox.Show("Configura√ß√£o inicial criada com os caminhos padr√£o da Viasoft.\n\nVerifique se as pastas C:\\Viasoft... existem na sua m√°quina.",
+                                    "Bem-vindo ao ExeBoard", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch (Exception ex)
                 {
-                    // Se der erro ao criar o arquivo, avisa o usu·rio e fecha a aplicaÁ„o.
-                    MessageBox.Show($"Erro crÌtico ao tentar criar o arquivo de configuraÁ„o 'Inicializar.ini'.\n\nErro: {ex.Message}",
-                                    "Erro Fatal",
-                                    MessageBoxButtons.OK,
-                                    MessageBoxIcon.Error);
+                    MessageBox.Show($"Erro cr√≠tico ao criar INI: {ex.Message}", "Erro Fatal", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     Application.Exit();
                 }
             }
@@ -143,20 +135,15 @@ namespace ExeBoard {
 
         private void CarregarDadosDeConfiguracao()
         {
-            // --- LIMPA E CONFIGURA AS NOVAS LISTAS ---
             clbClientes.Items.Clear();
             clbServidores.Items.Clear();
-            clbAtualizadores.Items.Clear(); // Limpa a nova lista
+            clbAtualizadores.Items.Clear();
 
-            // Diz ‡s listas para usarem a propriedade "Nome" dos objetos para exibiÁ„o
             clbClientes.DisplayMember = "Nome";
             clbServidores.DisplayMember = "Nome";
 
-            RegistrarLogCopiarDados("Carregando dados na aba de configuraÁıes...");
+            RegistrarLogCopiarDados("Carregando dados na aba de configura√ß√µes...");
 
-            // --- L  O ARQUIVO .INI E POPULA AS LISTAS ---
-
-            // Carregar Clientes (cÛdigo existente)
             string countClientesStr = LerValorIni("APLICACOES_CLIENTE", "Count", caminhoIni);
             if (int.TryParse(countClientesStr, out int countClientes))
             {
@@ -171,7 +158,6 @@ namespace ExeBoard {
                 }
             }
 
-            // Carregar Servidores (cÛdigo existente)
             string countServidoresStr = LerValorIni("APLICACOES_SERVIDORAS", "Count", caminhoIni);
             if (int.TryParse(countServidoresStr, out int countServidores))
             {
@@ -179,7 +165,6 @@ namespace ExeBoard {
                 {
                     string servidorNome = LerValorIni("APLICACOES_SERVIDORAS", $"Servidor{i}", caminhoIni);
                     string tipo = LerValorIni("APLICACOES_SERVIDORAS", $"Tipo{i}", caminhoIni);
-                    // CORRE«√O: Carrega tambÈm a flag de replicaÁ„o
                     string replicarStr = LerValorIni("APLICACOES_SERVIDORAS", $"Replicar{i}", caminhoIni);
                     bool replicar = string.Equals(replicarStr, "Sim", StringComparison.OrdinalIgnoreCase);
 
@@ -190,221 +175,141 @@ namespace ExeBoard {
                 }
             }
 
-            // --- INÕCIO DA NOVA L”GICA ---
-            // Carregar Atualizadores/Bancos
             string countBancosStr = LerValorIni("BANCO_DE_DADOS", "Count", caminhoIni);
             if (int.TryParse(countBancosStr, out int countBancos))
             {
                 for (int i = 0; i < countBancos; i++)
                 {
-                    // LÍ no novo formato "BancoX"
                     string bancoNome = LerValorIni("BANCO_DE_DADOS", $"Banco{i}", caminhoIni);
                     if (string.IsNullOrWhiteSpace(bancoNome))
                     {
-                        // Tenta ler no formato antigo "BancoDadosX" por compatibilidade
                         bancoNome = LerValorIni("BANCO_DE_DADOS", $"BancoDados{i}", caminhoIni);
                     }
 
                     if (!string.IsNullOrWhiteSpace(bancoNome))
                     {
-                        clbAtualizadores.Items.Add(bancoNome); // Adiciona como string
+                        clbAtualizadores.Items.Add(bancoNome);
                     }
                 }
             }
-            // --- FIM DA NOVA L”GICA ---
 
             configuracoesForamAlteradas = false;
-            RegistrarLogCopiarDados("Dados de configuraÁ„o carregados.");
+            RegistrarLogCopiarDados("Dados de configura√ß√£o carregados.");
             AtualizarEstadoBotoesConfig();
         }
         private void btnBuscarCaminhoBranch_Click(object sender, EventArgs e)
         {
-            using (FolderBrowserDialog dialogo = new FolderBrowserDialog())
+            // CORRE√á√ÉO BUG 1: Usar OpenFileDialog para o usu√°rio VER os arquivos
+            using (OpenFileDialog dialogo = new OpenFileDialog())
             {
-                dialogo.Description = "Selecione o diretÛrio da branch (Origem)";
-                dialogo.ShowNewFolderButton = true;
+                dialogo.Title = "Selecione qualquer arquivo dentro da pasta da Branch";
+                dialogo.Filter = "Todos os Arquivos (*.*)|*.*";
+                dialogo.CheckFileExists = true;
 
-                // --- CORRE«√O: LER DO LOCAL CORRETO ---
-                // LÍ o caminho da seÁ„o [CAMINHOS], chave "DE", que È onde o app carrega
-                string ultimoCaminho = LerValorIni("CAMINHOS", "DE", caminhoIni);
-
-                if (!string.IsNullOrEmpty(ultimoCaminho) && Directory.Exists(ultimoCaminho))
+                // Tenta iniciar onde j√° est√° configurado
+                string caminhoInicial = edtCaminhoBranch.Text;
+                if (!string.IsNullOrWhiteSpace(caminhoInicial) && Directory.Exists(caminhoInicial))
                 {
-                    dialogo.SelectedPath = ultimoCaminho;
-                }
-                else if (Directory.Exists(edtCaminhoBranch.Text)) // Usa o texto atual se for v·lido
-                {
-                    dialogo.SelectedPath = edtCaminhoBranch.Text;
+                    dialogo.InitialDirectory = caminhoInicial;
                 }
 
                 if (dialogo.ShowDialog() == DialogResult.OK)
                 {
-                    edtCaminhoBranch.Text = dialogo.SelectedPath;
+                    // O pulo do gato: Pegamos o diret√≥rio onde o arquivo est√°
+                    string pastaSelecionada = Path.GetDirectoryName(dialogo.FileName);
 
-                    // --- CORRE«√O: SALVAR NO LOCAL CORRETO ---
-                    // Salva o novo caminho de volta na seÁ„o [CAMINHOS], chave "DE"
-                    WritePrivateProfileString("CAMINHOS", "DE", dialogo.SelectedPath, caminhoIni);
-
-                    // (Opcional) Remove a chave antiga para limpeza
-                    WritePrivateProfileString("ULTIMOS_CAMINHOS", "UltimoCaminhoBranch", null, caminhoIni);
+                    edtCaminhoBranch.Text = pastaSelecionada;
+                    WritePrivateProfileString("CAMINHOS", "DE", pastaSelecionada, caminhoIni);
+                    SalvarCaminhosDaTela();
                 }
             }
         }
+        // Adicione esta vari√°vel no topo da classe (junto com os outros controles ou vari√°veis globais)
+        private CheckBox cbModoAutomacao;
+
         private void frmCopiarExes_Load(object sender, EventArgs e)
         {
-            // SEU C”DIGO ORIGINAL (MANTIDO)
             this.Location = new Point(this.Location.X, 0);
             RegistrarLogCopiarDados("CopiarExes aberto");
+
+            edtCaminhoBranch.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
+            edtCaminhoBranch.AutoCompleteSource = AutoCompleteSource.FileSystemDirectories;
+
             preencheAutomaticamenteOCampoDe();
-            RegistrarLogCopiarDados("Preencheu o campo DE.");
 
-            // --- INÕCIO DA CORRE«√O 1 (Carregar caminhos de destino) ---
-            // Removemos o log "Preencheu o campo PARA" e o substituÌmos por esta lÛgica
-
-            string placeholder = "Informe o caminho da pasta aqui";
-
-            // Carrega o caminho para Atualizadores (Dados)
-            string pastaDados = LerValorIni("CAMINHOS", "PASTA_DADOS", caminhoIni);
-            if (!string.IsNullOrWhiteSpace(pastaDados) && Directory.Exists(pastaDados))
-            {
-                txtDestinoAtualizadores.Text = pastaDados;
-                txtDestinoAtualizadores.ForeColor = SystemColors.WindowText;
-            }
+            // --- CORRE√á√ÉO BUG 2: BANDEJA (Garantir √çcone) ---
+            // Se o Form n√£o tiver √≠cone, o NotifyIcon n√£o aparece. Usamos um padr√£o do sistema se falhar.
+            if (this.Icon != null)
+                icBandeja.Icon = this.Icon;
             else
-            {
-                txtDestinoAtualizadores.Text = placeholder;
-                txtDestinoAtualizadores.ForeColor = SystemColors.GrayText;
-            }
+                icBandeja.Icon = SystemIcons.Application;
 
-            // Carrega o caminho para Clientes
-            string pastaCliente = LerValorIni("CAMINHOS", "PASTA_CLIENT", caminhoIni);
-            if (!string.IsNullOrWhiteSpace(pastaCliente) && Directory.Exists(pastaCliente))
-            {
-                txtDestinoClientes.Text = pastaCliente;
-                txtDestinoClientes.ForeColor = SystemColors.WindowText;
-            }
-            else
-            {
-                txtDestinoClientes.Text = placeholder;
-                txtDestinoClientes.ForeColor = SystemColors.GrayText;
-            }
+            icBandeja.Text = "ExeBoard - Gerenciador";
 
-            // Carrega o caminho para Servidores
-            string pastaServidor = LerValorIni("CAMINHOS", "PASTA_SERVER", caminhoIni);
-            if (!string.IsNullOrWhiteSpace(pastaServidor) && Directory.Exists(pastaServidor))
-            {
-                txtDestinoServidores.Text = pastaServidor;
-                txtDestinoServidores.ForeColor = SystemColors.WindowText;
-            }
-            else
-            {
-                txtDestinoServidores.Text = placeholder;
-                txtDestinoServidores.ForeColor = SystemColors.GrayText;
-            }
+            // Configura o menu da bandeja
+            ContextMenuStrip menuBandeja = new ContextMenuStrip();
+            menuBandeja.Items.Add("Abrir Painel", null, (s, ev) => {
+                this.Show();
+                this.WindowState = FormWindowState.Normal;
+                this.BringToFront(); // Traz para frente
+            });
+            menuBandeja.Items.Add("-");
+            menuBandeja.Items.Add("Fechar ExeBoard", null, (s, ev) => {
+                forcarFechamento = true;
+                Application.Exit();
+            });
+            icBandeja.ContextMenuStrip = menuBandeja;
 
-            RegistrarLogCopiarDados("Carregou os caminhos de destino (PARA).");
-            // --- FIM DA CORRE«√O 1 ---
+            // --- MELHORIA: CHECKBOX AUTOMA√á√ÉO (Criado via c√≥digo) ---
+            cbModoAutomacao = new CheckBox();
+            cbModoAutomacao.Text = "Usar Execut√°veis de Automa√ß√£o (ExesAutomacao)";
+            cbModoAutomacao.AutoSize = true;
+            cbModoAutomacao.Location = new Point(edtCaminhoBranch.Location.X, edtCaminhoBranch.Bottom + 5);
+            cbModoAutomacao.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+            cbModoAutomacao.ForeColor = Color.DarkBlue;
 
+            // Adiciona na aba "Copiar Dados" -> GroupBox Branch
+            gbBranch.Controls.Add(cbModoAutomacao);
+            // Aumenta um pouco o GroupBox para caber
+            gbBranch.Height += 25;
+
+            // --- Carregamento dos Caminhos ---
+            ConfigurarCaminhosPadraoSeVazio(txtDestinoAtualizadores, @"C:\Viasoft\Dados", "PASTA_DADOS", "UltimoCaminhoAtualizadores");
+            ConfigurarCaminhosPadraoSeVazio(txtDestinoClientes, @"C:\Viasoft\Client", "PASTA_CLIENT", "UltimoCaminhoClientes");
+            ConfigurarCaminhosPadraoSeVazio(txtDestinoServidores, @"C:\Viasoft\Server", "PASTA_SERVER", "UltimoCaminhoServidores");
+
+            // Carregamento de Listas
             CarregarBancoDeDados();
-            RegistrarLogCopiarDados("Carregou informaÁıes de banco de dados");
             CarregarClientes();
-            RegistrarLogCopiarDados("Carregou informaÁıes de aplicaÁıes cliente");
             CarregarServidores();
-            RegistrarLogCopiarDados("Carregou informaÁıes de servidores");
             carregarColaboradores();
 
+            // Verifica se deve rodar na bandeja ao iniciar
             string rodarNaBandeja = LerValorIni("CONFIG_GERAIS", "RODAR_NA_BANDEJA", this.caminhoIni);
-
             if (rodarNaBandeja == "Sim")
             {
                 icBandeja.Visible = true;
-                icBandeja.Icon = this.Icon;
-                icBandeja.Text = "CopiarExes";
-                icBandeja.Visible = false;
-
-                ContextMenuStrip menu = new ContextMenuStrip();
-                var clientesItem = new ToolStripMenuItem("Clientes");
-                Dictionary<string, ToolStripMenuItem> categorias = new Dictionary<string, ToolStripMenuItem>();
-                foreach (var item in cbGroupClientes.Items)
-                {
-                    if (item is ClienteItem cliente)
-                    {
-                        string categoria = cliente.Categoria;
-                        string clienteSemExtensaoExe = Path.GetFileNameWithoutExtension(cliente.Nome);
-
-                        ToolStripMenuItem categoriaMenu;
-
-                        if (!categorias.TryGetValue(categoria, out categoriaMenu))
-                        {
-                            categoriaMenu = new ToolStripMenuItem(categoria);
-                            clientesItem.DropDownItems.Add(categoriaMenu);
-                            categorias[categoria] = categoriaMenu;
-                        }
-
-                        categoriaMenu.DropDownItems.Add(clienteSemExtensaoExe, null, (s, e) =>
-                        {
-                            RegistrarLogCopiarDados($"Abrindo sistema {cliente.Nome} da categoria {categoria}");
-                            Process.Start(new ProcessStartInfo
-                            {
-                                FileName = cliente.CaminhoCompletoCliente,
-                                UseShellExecute = true
-                            });
-                        });
-                    }
-                }
-                // ... (o resto do seu cÛdigo para a bandeja continua aqui, est· correto)
             }
 
-            // =============================================================
-            // --- (C”DIGO DE CONFIGURA«√O INICIAL - MANTIDO) ---
-            // =============================================================
-            if (cbGroupClientes.Items.Count == 0 && cbGroupServidores.Items.Count == 0)
-            {
-                DialogResult resultado = MessageBox.Show(
-                    "Nenhuma aplicaÁ„o cliente ou servidora foi encontrada na sua configuraÁ„o.\n\n" +
-                    "Deseja ir para a aba de 'ConfiguraÁıes' para adicion·-las agora?",
-                    "ConfiguraÁ„o Inicial",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Information
-                );
-
-                if (resultado == DialogResult.Yes)
-                {
-                    tabCopiarExes.SelectedTab = tabConfiguracoes;
-                }
-            }
-
-            // --- (C”DIGO DA LUPA - MANTIDO) ---
+            // √çcones dos bot√µes de busca
             try
             {
-                string caminhoIcone = Path.Combine(Application.StartupPath, "search.png");
-
+                string caminhoIcone = Path.Combine(AppContext.BaseDirectory, "search.png");
                 if (File.Exists(caminhoIcone))
                 {
                     Image iconeLupa = Image.FromFile(caminhoIcone);
-
                     btnProcurarAtualizadores.Image = iconeLupa;
                     btnProcurarClientes.Image = iconeLupa;
                     btnProcurarServidores.Image = iconeLupa;
                 }
-                else
-                {
-                    RegistrarLogCopiarDados("Aviso: 'search.png' n„o foi encontrado na pasta do .exe.");
-                }
             }
-            catch (Exception ex)
-            {
-                RegistrarLogCopiarDados($"ERRO ao carregar o Ìcone 'search.png': {ex.Message}");
-            }
+            catch { }
         }
-
-        private void ReiniciarServidor(ServidorItem servidor, bool acionadoNaBandeja) // Alterado para receber ServidorItem
+        private void ReiniciarServidor(ServidorItem servidor, bool acionadoNaBandeja)
         {
-            if (servidor == null) return; // SeguranÁa extra
+            if (servidor == null) return;
 
-            // Pega o caminho raiz de destino dos servidores do novo TextBox
             string caminhoServidorDestino = txtDestinoServidores.Text;
-            // Pega o nome da subpasta do .ini
             string pastaServerIni = LerValorIni("CAMINHOS", "PASTA_SERVER", caminhoIni);
 
             if (servidor.Tipo == "Servico")
@@ -416,16 +321,16 @@ namespace ExeBoard {
                     {
                         sc.Stop();
                         sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(10));
-                        RegistrarLogCopiarDados("Parou o serviÁo " + servidor.Nome);
+                        RegistrarLogCopiarDados("Parou o servi√ßo " + servidor.Nome);
                     }
                     sc.Start();
                     sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(10));
-                    RegistrarLogCopiarDados("Reiniciou o serviÁo " + servidor.Nome);
-                    if (acionadoNaBandeja) MessageBox.Show($"ServiÁo {servidor.Nome} reiniciado.", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    RegistrarLogCopiarDados("Reiniciou o servi√ßo " + servidor.Nome);
+                    if (acionadoNaBandeja) MessageBox.Show($"Servi√ßo {servidor.Nome} reiniciado.", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch (Exception ex)
                 {
-                    RegistrarLogCopiarDados($"Erro ao reiniciar serviÁo {servidor.Nome}: {ex.Message}");
+                    RegistrarLogCopiarDados($"Erro ao reiniciar servi√ßo {servidor.Nome}: {ex.Message}");
                     if (acionadoNaBandeja) MessageBox.Show($"Erro: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
@@ -433,7 +338,6 @@ namespace ExeBoard {
             {
                 try
                 {
-                    // Monta o caminho completo do execut·vel
                     string caminhoCompletoExeDestino = Path.Combine(caminhoServidorDestino, pastaServerIni, servidor.SubDiretorios ?? "", servidor.Nome);
                     string nomeProcesso = Path.GetFileNameWithoutExtension(servidor.Nome);
 
@@ -441,26 +345,29 @@ namespace ExeBoard {
                     {
                         processo.Kill();
                         processo.WaitForExit();
-                        RegistrarLogCopiarDados("Parou a aplicaÁ„o: " + servidor.Nome);
+                        RegistrarLogCopiarDados("Parou a aplica√ß√£o: " + servidor.Nome);
                     }
                     Process.Start(new ProcessStartInfo { FileName = caminhoCompletoExeDestino, UseShellExecute = true });
-                    RegistrarLogCopiarDados("Reiniciou a aplicaÁ„o: " + servidor.Nome);
-                    if (acionadoNaBandeja) MessageBox.Show($"AplicaÁ„o {servidor.Nome} reiniciada.", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    RegistrarLogCopiarDados("Reiniciou a aplica√ß√£o: " + servidor.Nome);
+                    if (acionadoNaBandeja) MessageBox.Show($"Aplica√ß√£o {servidor.Nome} reiniciada.", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch (Exception ex)
                 {
-                    RegistrarLogCopiarDados($"Erro ao reiniciar aplicaÁ„o {servidor.Nome}: {ex.Message}");
+                    RegistrarLogCopiarDados($"Erro ao reiniciar aplica√ß√£o {servidor.Nome}: {ex.Message}");
                     if (acionadoNaBandeja) MessageBox.Show($"Erro: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
         }
 
-        // Nova assinatura: adiciona 'validarParaCopia'
         private void PararServidor(ServidorItem servidor, bool acionadoNaBandeja, bool validarParaCopia = false)
         {
             if (servidor == null) return;
 
-            // --- ETAPA 1: ENVIAR COMANDO DE PARADA ---
+            string nomeProcesso = Path.GetFileNameWithoutExtension(servidor.Nome);
+
+            // ---------------------------------------------------------
+            // ETAPA 1: Tenta parar via ServiceController (O jeito educado)
+            // ---------------------------------------------------------
             if (servidor.Tipo == "Servico")
             {
                 try
@@ -468,114 +375,73 @@ namespace ExeBoard {
                     ServiceController sc = new ServiceController(servidor.Nome);
                     if (sc.Status != ServiceControllerStatus.Stopped && sc.Status != ServiceControllerStatus.StopPending)
                     {
+                        RegistrarLogCopiarDados($"Parando o servi√ßo {servidor.Nome}...");
                         sc.Stop();
-                        sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(10));
-                        RegistrarLogCopiarDados("Parou o serviÁo " + servidor.Nome);
+                        sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(20));
+                        RegistrarLogCopiarDados($"Servi√ßo {servidor.Nome} reportou status 'Parado'.");
                     }
                 }
                 catch (Exception ex)
                 {
-                    RegistrarLogCopiarDados($"Erro ao parar serviÁo {servidor.Nome}: {ex.Message}");
+                    RegistrarLogCopiarDados($"Aviso ao parar servi√ßo {servidor.Nome}: {ex.Message} (Tentaremos for√ßar o encerramento do processo)");
                 }
             }
-            else if (servidor.Tipo == "Aplicacao")
+
+            // ---------------------------------------------------------
+            // ETAPA 2: O "Tiro de Miseric√≥rdia" (Garante que o EXE morreu)
+            // Serve tanto para Aplica√ß√£o quanto para Servi√ßo que travou
+            // ---------------------------------------------------------
+            try
             {
-                try
+                var processos = Process.GetProcessesByName(nomeProcesso);
+                if (processos.Length > 0)
                 {
-                    string nomeExe = servidor.Nome;
-                    Process p = new Process();
-                    p.StartInfo.FileName = "taskkill";
-                    p.StartInfo.Arguments = $"/f /im \"{nomeExe}\" /t";
-                    p.StartInfo.UseShellExecute = false;
-                    p.StartInfo.CreateNoWindow = true;
-                    p.StartInfo.RedirectStandardOutput = true;
-                    p.Start();
-                    p.WaitForExit(5000);
-                    string output = p.StandardOutput.ReadToEnd();
-
-                    if (output.StartsWith("SUCCESS") || output.Contains("process with PID"))
-                        RegistrarLogCopiarDados("Comando para parar aplicaÁ„o enviado: " + servidor.Nome);
-                    else if (output.Contains("process not found"))
-                        RegistrarLogCopiarDados("AplicaÁ„o j· estava parada: " + servidor.Nome);
-                }
-                catch (Exception ex)
-                {
-                    RegistrarLogCopiarDados($"Erro ao parar aplicaÁ„o {servidor.Nome}: {ex.Message}");
+                    RegistrarLogCopiarDados($"Detectado(s) {processos.Length} processo(s) de {nomeProcesso} ainda ativos. For√ßando encerramento...");
+                    foreach (var p in processos)
+                    {
+                        try
+                        {
+                            p.Kill(); // Mata o processo
+                            p.WaitForExit(3000); // Espera at√© 3s para ter certeza que morreu
+                        }
+                        catch { /* Ignora erro de acesso se j√° morreu */ }
+                    }
+                    RegistrarLogCopiarDados($"Processo {nomeProcesso} encerrado com for√ßa bruta.");
                 }
             }
+            catch (Exception ex)
+            {
+                RegistrarLogCopiarDados($"Erro ao tentar matar processo {nomeProcesso}: {ex.Message}");
+            }
 
-            // --- ETAPA 2: VALIDA«√O (SE SOLICITADO) ---
+            // ---------------------------------------------------------
+            // ETAPA 3: Valida√ß√£o Final (S√≥ se for copiar arquivos)
+            // ---------------------------------------------------------
             if (validarParaCopia)
             {
-                RegistrarLogCopiarDados($"Validando encerramento de {servidor.Nome}...");
-                bool parado = false;
-                for (int i = 0; i < 10; i++) // Tenta por 10 segundos
+                RegistrarLogCopiarDados($"Validando libera√ß√£o de {servidor.Nome}...");
+                bool liberado = false;
+
+                // Tenta verificar se o processo sumiu da lista por 10 segundos
+                for (int i = 0; i < 10; i++)
                 {
-                    string status = ObterStatusServidor(servidor);
-                    if (status == "Parado")
+                    if (Process.GetProcessesByName(nomeProcesso).Length == 0)
                     {
-                        parado = true;
+                        liberado = true;
                         break;
                     }
                     Thread.Sleep(1000);
                 }
 
-                if (parado)
+                if (liberado)
                 {
-                    RegistrarLogCopiarDados($"OK: {servidor.Nome} confirmado como 'Parado'.");
+                    RegistrarLogCopiarDados($"OK: {servidor.Nome} totalmente encerrado.");
                 }
                 else
                 {
-                    RegistrarLogCopiarDados($"ERRO: {servidor.Nome} n„o parou a tempo.");
-                    throw new Exception($"Falha ao parar {servidor.Nome}. CÛpia abortada.");
-                }
-            }
-        }
-        private void IniciarServidor(ServidorItem servidor, bool acionadoNaBandeja) // Alterado para receber ServidorItem
-        {
-            if (servidor == null) return;
-
-            string caminhoServidorDestino = txtDestinoServidores.Text;
-            string pastaServerIni = LerValorIni("CAMINHOS", "PASTA_SERVER", caminhoIni);
-
-            if (servidor.Tipo == "Servico")
-            {
-                try
-                {
-                    ServiceController sc = new ServiceController(servidor.Nome);
-                    if (sc.Status != ServiceControllerStatus.Running && sc.Status != ServiceControllerStatus.StartPending)
-                    {
-                        sc.Start();
-                        sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(10));
-                        RegistrarLogCopiarDados("Iniciou o serviÁo " + servidor.Nome);
-                        if (acionadoNaBandeja) MessageBox.Show($"ServiÁo {servidor.Nome} iniciado.", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }
-                    else if (acionadoNaBandeja) MessageBox.Show($"ServiÁo {servidor.Nome} j· estava iniciado.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                catch (Exception ex)
-                {
-                    RegistrarLogCopiarDados($"Erro ao iniciar serviÁo {servidor.Nome}: {ex.Message}");
-                    if (acionadoNaBandeja) MessageBox.Show($"Erro: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
-            else if (servidor.Tipo == "Aplicacao")
-            {
-                try
-                {
-                    string nomeProcesso = Path.GetFileNameWithoutExtension(servidor.Nome);
-                    if (Process.GetProcessesByName(nomeProcesso).Length == 0)
-                    {
-                        string caminhoCompletoExeDestino = Path.Combine(caminhoServidorDestino, pastaServerIni, servidor.SubDiretorios ?? "", servidor.Nome);
-                        Process.Start(new ProcessStartInfo { FileName = caminhoCompletoExeDestino, UseShellExecute = true });
-                        RegistrarLogCopiarDados("Iniciou a aplicaÁ„o: " + servidor.Nome);
-                        if (acionadoNaBandeja) MessageBox.Show($"AplicaÁ„o {servidor.Nome} iniciada.", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }
-                    else if (acionadoNaBandeja) MessageBox.Show($"AplicaÁ„o {servidor.Nome} j· estava iniciada.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                catch (Exception ex)
-                {
-                    RegistrarLogCopiarDados($"Erro ao iniciar aplicaÁ„o {servidor.Nome}: {ex.Message}");
-                    if (acionadoNaBandeja) MessageBox.Show($"Erro: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    RegistrarLogCopiarDados($"ERRO CR√çTICO: {servidor.Nome} ainda est√° rodando e vai bloquear a c√≥pia.", Color.Red);
+                    // N√£o vamos lan√ßar Exception aqui para n√£o parar o fluxo dos outros, 
+                    // mas o m√©todo de c√≥pia vai tentar e falhar se ainda estiver preso.
                 }
             }
         }
@@ -588,114 +454,205 @@ namespace ExeBoard {
             }
             else
             {
-                RegistrarLogCopiarDados("N„o encontrou o arquivo Inicializar.ini ou par‚metro DE n„o existe.");
-                MessageBox.Show("O arquivo Inicializar.ini ou par‚metro DE n„o existe. Consulte a documentaÁ„o no repositÛrio do projeto. Site: https://github.com/giancarlogiulian/CopiarExes", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                RegistrarLogCopiarDados("N√£o encontrou o arquivo Inicializar.ini ou par√¢metro DE n√£o existe.");
             }
         }
 
-        private void CarregarBancoDeDados()
-        {
-            cbGroupAtualizadores.Items.Clear(); // Limpa a lista primeiro
-
-            string countStr = LerValorIni("BANCO_DE_DADOS", "Count", caminhoIni);
-            if (int.TryParse(countStr, out int count))
-            {
-                // --- INÕCIO DA CORRE«√O ---
-                for (int i = 0; i < count; i++) // Loop corrigido para i < count
-                {
-                    // LÍ no novo formato "BancoX"
-                    string chave = $"Banco{i}";
-                    string valor = LerValorIni("BANCO_DE_DADOS", chave, caminhoIni);
-
-                    if (string.IsNullOrWhiteSpace(valor))
-                    {
-                        // Tenta ler no formato antigo "BancoDadosX" por compatibilidade
-                        chave = $"BancoDados{i}";
-                        valor = LerValorIni("BANCO_DE_DADOS", chave, caminhoIni);
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(valor))
-                    {
-                        cbGroupAtualizadores.Items.Add(valor);
-                        cbGroupAtualizadores.SetItemChecked(cbGroupAtualizadores.Items.Count - 1, true); // Marca o item recÈm-adicionado
-                        RegistrarLogCopiarDados("Carregou a informaÁ„o do banco " + valor + ". Par‚metro: " + chave);
-                    }
-                }
-                // --- FIM DA CORRE«√O ---
-            }
-        }
         private void CarregarClientes()
         {
-            cbGroupClientes.Items.Clear(); // MantÈm a limpeza
+            cbGroupClientes.Items.Clear();
+            List<ClienteItem> listaTemporaria = new List<ClienteItem>(); // Lista para ordenar
 
             string countStr = LerValorIni("APLICACOES_CLIENTE", "Count", caminhoIni);
             if (int.TryParse(countStr, out int count))
             {
-                // CORRE«√O: O loop deve ir atÈ count-1 ou usar i < count
                 for (int i = 0; i < count; i++)
                 {
-                    string clienteId = $"Cliente{i}";
-                    string categoriaId = $"Categoria{i}";
-                    string subDiretoriosId = $"SubDiretorios{i}";
-
-                    string cliente = LerValorIni("APLICACOES_CLIENTE", clienteId, caminhoIni);
-                    string categoria = LerValorIni("APLICACOES_CLIENTE", categoriaId, caminhoIni);
-                    string subDiretorio = LerValorIni("APLICACOES_CLIENTE", subDiretoriosId, caminhoIni);
+                    string cliente = LerValorIni("APLICACOES_CLIENTE", $"Cliente{i}", caminhoIni);
+                    string categoria = LerValorIni("APLICACOES_CLIENTE", $"Categoria{i}", caminhoIni);
+                    string subDiretorio = LerValorIni("APLICACOES_CLIENTE", $"SubDiretorios{i}", caminhoIni);
 
                     if (!string.IsNullOrWhiteSpace(cliente))
                     {
-                        // REMOVIDO: A linha que chamava getCaminhoCompletoAplicacao
-                        // A propriedade CaminhoCompletoCliente ser· montada dinamicamente onde for necess·ria
-
-                        cbGroupClientes.Items.Add(new ClienteItem
+                        listaTemporaria.Add(new ClienteItem
                         {
                             Nome = cliente,
                             Categoria = categoria,
                             SubDiretorios = subDiretorio
-                            // CaminhoCompletoCliente = caminhoCompletoCliente // Removido
                         });
-                        // CORRE«√O: Usar Count-1 para marcar o ˙ltimo item adicionado
-                        cbGroupClientes.SetItemChecked(cbGroupClientes.Items.Count - 1, true);
-                        RegistrarLogCopiarDados("Carregou a informaÁ„o da aplicaÁ„o cliente " + cliente + ". Par‚metro: " + clienteId);
                     }
                 }
+            }
+
+            // TAREFA 6: Ordena√ß√£o Alfab√©tica
+            var listaOrdenada = listaTemporaria.OrderBy(c => c.Nome).ToList();
+
+            foreach (var item in listaOrdenada)
+            {
+                cbGroupClientes.Items.Add(item);
+                cbGroupClientes.SetItemChecked(cbGroupClientes.Items.Count - 1, true);
             }
         }
 
         private void CarregarServidores()
         {
             cbGroupServidores.Items.Clear();
+            List<ServidorItem> listaTemporaria = new List<ServidorItem>();
 
             string countStr = LerValorIni("APLICACOES_SERVIDORAS", "Count", caminhoIni);
             if (int.TryParse(countStr, out int count))
             {
-                for (int i = 0; i < count; i++) // Loop correto
+                for (int i = 0; i < count; i++)
                 {
                     string servidor = LerValorIni("APLICACOES_SERVIDORAS", $"Servidor{i}", caminhoIni);
                     string tipo = LerValorIni("APLICACOES_SERVIDORAS", $"Tipo{i}", caminhoIni);
                     string subDir = LerValorIni("APLICACOES_SERVIDORAS", $"SubDiretorios{i}", caminhoIni);
                     string replicar = LerValorIni("APLICACOES_SERVIDORAS", $"Replicar{i}", caminhoIni);
 
-                    if (!string.IsNullOrWhiteSpace(servidor) && !string.IsNullOrWhiteSpace(tipo))
+                    if (!string.IsNullOrWhiteSpace(servidor))
                     {
+                        // S√≥ adiciona se for para replicar (l√≥gica original)
                         if (string.Equals(replicar, "Sim", StringComparison.OrdinalIgnoreCase))
                         {
-                            // REMOVIDO: A linha que chamava getCaminhoCompletoAplicacao
-                            // A propriedade CaminhoCompletoAplicacao ser· montada dinamicamente
-
-                            cbGroupServidores.Items.Add(new ServidorItem
+                            listaTemporaria.Add(new ServidorItem
                             {
                                 Nome = servidor,
                                 Tipo = tipo,
                                 ReplicarParaCopia = true,
-                                // CaminhoCompletoAplicacao = caminhoCompletoAplicacao, // Removido
                                 SubDiretorios = subDir
                             });
-                            cbGroupServidores.SetItemChecked(cbGroupServidores.Items.Count - 1, true); // Marca o ˙ltimo adicionado
                         }
                     }
                 }
-                RegistrarLogCopiarDados("Carregou informaÁıes de servidores para a aba 'Copiar Dados'.");
+            }
+
+            // TAREFA 6: Ordena√ß√£o Alfab√©tica
+            var listaOrdenada = listaTemporaria.OrderBy(s => s.Nome).ToList();
+
+            foreach (var item in listaOrdenada)
+            {
+                cbGroupServidores.Items.Add(item);
+                cbGroupServidores.SetItemChecked(cbGroupServidores.Items.Count - 1, true);
+            }
+        }
+
+        private void CarregarBancoDeDados()
+        {
+            cbGroupAtualizadores.Items.Clear();
+            List<string> listaTemporaria = new List<string>();
+
+            string countStr = LerValorIni("BANCO_DE_DADOS", "Count", caminhoIni);
+            if (int.TryParse(countStr, out int count))
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    string valor = LerValorIni("BANCO_DE_DADOS", $"Banco{i}", caminhoIni);
+                    if (string.IsNullOrWhiteSpace(valor)) valor = LerValorIni("BANCO_DE_DADOS", $"BancoDados{i}", caminhoIni);
+
+                    if (!string.IsNullOrWhiteSpace(valor))
+                    {
+                        listaTemporaria.Add(valor);
+                    }
+                }
+            }
+
+            // TAREFA 6: Ordena√ß√£o Alfab√©tica
+            listaTemporaria.Sort();
+
+            foreach (var item in listaTemporaria)
+            {
+                cbGroupAtualizadores.Items.Add(item);
+                cbGroupAtualizadores.SetItemChecked(cbGroupAtualizadores.Items.Count - 1, true);
+            }
+        }
+
+        // --------------------------------------------------------------------------------
+        // M√âTODO 1: O Loop (iniciarServidores - Plural)
+        // Esse √© o que estava faltando (Erro CS0103)
+        // --------------------------------------------------------------------------------
+        private void iniciarServidores(string caminhoServidorDestino, List<ServidorItem> servidoresParaIniciar)
+        {
+            foreach (var servidor in servidoresParaIniciar)
+            {
+                // Chama o m√©todo individual abaixo
+                IniciarServidor(servidor, false);
+            }
+
+            RegistrarLogCopiarDados("Sistema pronto para uso...");
+            RegistrarLogCopiarDados("Se necess√°rio, atualize o banco de dados a ser utilizado...");
+        }
+
+        // --------------------------------------------------------------------------------
+        // M√âTODO 2: A L√≥gica Individual (IniciarServidor - Singular)
+        // Esse √© o que estava duplicado (Erro CS0111). Agora s√≥ teremos este.
+        // --------------------------------------------------------------------------------
+        private void IniciarServidor(ServidorItem servidor, bool acionadoNaBandeja)
+        {
+            if (servidor == null) return;
+
+            string caminhoServidorDestino = txtDestinoServidores.Text; // Pega o texto da tela
+
+            if (servidor.Tipo == "Servico")
+            {
+                try
+                {
+                    ServiceController sc = new ServiceController(servidor.Nome);
+                    sc.Refresh(); // Atualiza status
+
+                    if (sc.Status != ServiceControllerStatus.Running && sc.Status != ServiceControllerStatus.StartPending)
+                    {
+                        RegistrarLogCopiarDados($"Solicitando in√≠cio do servi√ßo {servidor.Nome}...");
+                        sc.Start();
+
+                        // Aguarda at√© 1 minuto (Corre√ß√£o do Timeout)
+                        sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromMinutes(1));
+
+                        RegistrarLogCopiarDados("Iniciou o servi√ßo " + servidor.Nome, Color.DarkGreen);
+                        if (acionadoNaBandeja) MessageBox.Show($"Servi√ßo {servidor.Nome} iniciado.", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    else if (acionadoNaBandeja)
+                    {
+                        MessageBox.Show($"Servi√ßo {servidor.Nome} j√° estava iniciado.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                }
+                catch (System.ServiceProcess.TimeoutException)
+                {
+                    RegistrarLogCopiarDados($"ALERTA: O servi√ßo {servidor.Nome} demorou mais de 1 minuto para responder.", Color.Orange);
+                }
+                catch (Exception ex)
+                {
+                    RegistrarLogCopiarDados($"Erro ao iniciar servi√ßo {servidor.Nome}: {ex.Message}", Color.Red);
+                    if (acionadoNaBandeja) MessageBox.Show($"Erro: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            else if (servidor.Tipo == "Aplicacao")
+            {
+                try
+                {
+                    // Tenta achar onde est√° o execut√°vel para iniciar
+                    // Usa o caminho da tela + subdiret√≥rios
+                    string pastaServerIni = LerValorIni("CAMINHOS", "PASTA_SERVER", caminhoIni); // Backup caso a tela esteja vazia
+                    string baseDir = !string.IsNullOrWhiteSpace(caminhoServidorDestino) ? caminhoServidorDestino : pastaServerIni;
+
+                    string caminhoCompletoExeDestino = Path.Combine(baseDir, servidor.SubDiretorios ?? "", servidor.Nome);
+
+                    // Verifica se o arquivo existe antes de tentar abrir
+                    if (!File.Exists(caminhoCompletoExeDestino))
+                    {
+                        // Tenta achar s√≥ com o nome se o caminho completo falhar
+                        caminhoCompletoExeDestino = Path.Combine(baseDir, servidor.Nome);
+                    }
+
+                    Process.Start(new ProcessStartInfo { FileName = caminhoCompletoExeDestino, UseShellExecute = true });
+                    RegistrarLogCopiarDados("Iniciou a aplica√ß√£o: " + servidor.Nome);
+
+                    if (acionadoNaBandeja) MessageBox.Show($"Aplica√ß√£o {servidor.Nome} iniciada.", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    RegistrarLogCopiarDados($"Erro ao iniciar aplica√ß√£o {servidor.Nome}: {ex.Message}", Color.Red);
+                    if (acionadoNaBandeja) MessageBox.Show($"Erro: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
         }
 
@@ -706,33 +663,23 @@ namespace ExeBoard {
             return buffer.ToString();
         }
 
-        // 1. (Substituir) RegistrarLogCopiarDados
-        // Vers„o principal que aceita cor
         private void RegistrarLogCopiarDados(string mensagem, Color cor)
         {
-            // 1. Cria a entrada do log
             var logEntry = new LogEntry { Mensagem = mensagem, Cor = cor };
 
-            // 2. Salva na lista mestra (de forma segura)
             lock (listaDeLogs)
             {
                 listaDeLogs.Add(logEntry);
             }
 
-            // 3. Desenha na tela (usando o novo auxiliar)
             AnexarLogAoRtb(mensagem, cor);
         }
-        // Sobrecarga (Opcional, mas recomendado):
-        // MantÈm o mÈtodo antigo para que o resto do seu cÛdigo continue funcionando
         private void RegistrarLogCopiarDados(string mensagem)
         {
-            // Chama a vers„o principal com a cor padr„o (preto)
             RegistrarLogCopiarDados(mensagem, Color.Black);
         }
 
 
-        // 2. (Substituir) RegistrarLogServidores
-        // Vers„o principal que aceita cor
         private void RegistrarLogServidores(string mensagem, Color cor)
         {
             if (rtbLogServidores.InvokeRequired)
@@ -751,7 +698,6 @@ namespace ExeBoard {
             rtbLogServidores.ScrollToCaret();
         }
 
-        // Sobrecarga para manter o cÛdigo antigo funcionando
         private void RegistrarLogServidores(string mensagem)
         {
             RegistrarLogServidores(mensagem, Color.Black);
@@ -759,15 +705,43 @@ namespace ExeBoard {
 
         private async void btnCopiarDados_Click(object sender, EventArgs e)
         {
+            SalvarCaminhosDaTela();
             btnCopiarDados.Enabled = false;
-            // --- CORRE«√O: LOG AZUL (INFORMA«√O) ---
-            RegistrarLogCopiarDados("Iniciando processo de cÛpia...", Color.Blue);
+            RegistrarLogCopiarDados("Iniciando processo de c√≥pia...", Color.Blue);
 
-            // ... (Seu cÛdigo de coleta de listas est· correto) ...
+            string caminhoBranch = edtCaminhoBranch.Text;
+
+            // --- L√ìGICA DA MELHORIA (AUTOMA√á√ÉO) ---
+            string pastaOrigemExecutaveis = "";
+
+            if (cbModoAutomacao.Checked)
+            {
+                // Se marcado, for√ßa a pasta de automa√ß√£o
+                pastaOrigemExecutaveis = Path.Combine(caminhoBranch, "ExesAutomacao");
+                RegistrarLogCopiarDados("MODO AUTOMA√á√ÉO ATIVO: Buscando em 'ExesAutomacao'", Color.Purple);
+            }
+            else
+            {
+                // Se desmarcado, usa o padr√£o (Exes) ou o que estiver no INI
+                string pastaClientIni = LerValorIni("CAMINHOS", "DE_PASTA_CLIENT", caminhoIni);
+                string subPastaPadrao = !string.IsNullOrWhiteSpace(pastaClientIni) ? pastaClientIni : "Exes"; // Default "Exes"
+                pastaOrigemExecutaveis = Path.Combine(caminhoBranch, subPastaPadrao);
+            }
+
+            // Verifica se a pasta de origem existe
+            if (!Directory.Exists(pastaOrigemExecutaveis))
+            {
+                RegistrarLogCopiarDados($"ERRO: A pasta de origem n√£o existe: {pastaOrigemExecutaveis}", Color.Red);
+                // Tenta fallback para a raiz se falhar
+                RegistrarLogCopiarDados("Tentando buscar na raiz da Branch...", Color.Orange);
+                pastaOrigemExecutaveis = caminhoBranch;
+            }
+            // --------------------------------------
+
             string caminhoClienteDestino = txtDestinoClientes.Text;
             string caminhoServidorDestino = txtDestinoServidores.Text;
-            string caminhoBranch = edtCaminhoBranch.Text;
             string caminhoAtualizadores = txtDestinoAtualizadores.Text;
+
             var clientesParaCopiar = cbGroupClientes.CheckedItems.OfType<ClienteItem>().ToList();
             var servidoresParaCopiar = cbGroupServidores.CheckedItems.OfType<ServidorItem>().ToList();
             var atualizadoresParaCopiar = cbGroupAtualizadores.CheckedItems.Cast<object>().ToList();
@@ -776,22 +750,25 @@ namespace ExeBoard {
             {
                 bool sucesso = await Task.Run(() =>
                 {
-                    RegistrarLogCopiarDados("Parando aplicaÁıes clientes...");
+                    RegistrarLogCopiarDados("Parando aplica√ß√µes clientes...");
                     if (!encerrarClientes(caminhoClienteDestino, clientesParaCopiar))
                     {
                         RegistrarLogCopiarDados("ERRO: Falha ao encerrar clientes. Abortando.", Color.Red);
                         return false;
                     }
 
-                    RegistrarLogCopiarDados("Parando aplicaÁıes servidoras...");
+                    RegistrarLogCopiarDados("Parando aplica√ß√µes servidoras...");
                     if (!encerrarServidores(servidoresParaCopiar))
                     {
                         RegistrarLogCopiarDados("ERRO: Falha ao encerrar servidores. Abortando.", Color.Red);
                         return false;
                     }
 
-                    RegistrarLogCopiarDados("Copiando execut·veis via C#...");
-                    copiarArquivos(caminhoBranch, caminhoClienteDestino, caminhoServidorDestino, caminhoAtualizadores,
+                    RegistrarLogCopiarDados("Copiando execut√°veis via C#...");
+
+                    // ATEN√á√ÉO: Passamos agora 'pastaOrigemExecutaveis' em vez de 'caminhoBranch' puro
+                    // para evitar que ele indexe a pasta errada.
+                    copiarArquivos(pastaOrigemExecutaveis, caminhoBranch, caminhoClienteDestino, caminhoServidorDestino, caminhoAtualizadores,
                                    clientesParaCopiar, servidoresParaCopiar, atualizadoresParaCopiar);
 
                     RegistrarLogCopiarDados("Iniciando servidores...");
@@ -801,16 +778,13 @@ namespace ExeBoard {
                 });
 
                 if (sucesso)
-                    // --- CORRE«√O: LOG AZUL (INFORMA«√O) ---
-                    RegistrarLogCopiarDados("Processo de cÛpia concluÌdo!", Color.Blue);
+                    RegistrarLogCopiarDados("Processo de c√≥pia conclu√≠do!", Color.Blue);
                 else
-                    // --- CORRE«√O: LOG VERMELHO ---
-                    RegistrarLogCopiarDados("Processo de cÛpia falhou. Verifique os logs.", Color.Red);
+                    RegistrarLogCopiarDados("Processo de c√≥pia falhou. Verifique os logs.", Color.Red);
             }
             catch (Exception ex)
             {
-                // --- CORRE«√O: LOG VERMELHO ---
-                RegistrarLogCopiarDados($"ERRO FATAL no processo de cÛpia: {ex.Message}", Color.Red);
+                RegistrarLogCopiarDados($"ERRO FATAL no processo de c√≥pia: {ex.Message}", Color.Red);
             }
             finally
             {
@@ -823,7 +797,6 @@ namespace ExeBoard {
             {
                 foreach (var servidor in servidoresParaParar)
                 {
-                    // O 'true' no final forÁa a VALIDA«√O que vocÍ pediu
                     PararServidor(servidor, false, true);
                 }
                 return true;
@@ -833,31 +806,37 @@ namespace ExeBoard {
                 RegistrarLogCopiarDados($"FALHA: {ex.Message}");
                 return false;
             }
-        }                 // Assinatura modificada para receber a lista
+        }
         private bool encerrarClientes(string caminhoClienteDestino, List<ClienteItem> clientesParaParar)
         {
-            // string pastaClientIni = LerValorIni("CAMINHOS", "PASTA_CLIENT", caminhoIni); // <-- REMOVIDO
-
-            // ... (LÛgica de "Matar Processos" permanece igual) ...
+            // CORRE√á√ÉO: O loop estava vazio! Agora ele chama a fun√ß√£o para matar o processo.
             foreach (var cliente in clientesParaParar)
             {
-                // ... (cÛdigo do taskkill) ...
+                // Convertemos o ClienteItem para ServidorItem temporariamente s√≥ para usar a l√≥gica de 'PararServidor'
+                // ou implementamos o Kill direto aqui. Vamos usar o Kill direto para ser mais simples:
+                try
+                {
+                    string nomeProcesso = Path.GetFileNameWithoutExtension(cliente.Nome);
+                    foreach (var p in Process.GetProcessesByName(nomeProcesso))
+                    {
+                        p.Kill();
+                        p.WaitForExit(2000);
+                    }
+                }
+                catch { /* Ignora se j√° morreu */ }
             }
 
-            // ... (LÛgica de "ValidaÁ„o" permanece igual) ...
-
-            // --- ETAPA 3: DELETAR ARQUIVOS ANTIGOS (COM O CAMINHO CORRIGIDO) ---
             RegistrarLogCopiarDados("OK: Clientes encerrados. Excluindo arquivos antigos...");
+
             foreach (var cliente in clientesParaParar)
             {
                 try
                 {
-                    // --- CORRE«√O: "pastaClientIni" foi removido do Path.Combine ---
                     string caminhoCompletoExeDestino = Path.Combine(caminhoClienteDestino, cliente.SubDiretorios ?? "", cliente.Nome);
                     if (File.Exists(caminhoCompletoExeDestino))
                     {
                         File.Delete(caminhoCompletoExeDestino);
-                        RegistrarLogCopiarDados($"OK: Arquivo antigo {cliente.Nome} excluÌdo.");
+                        RegistrarLogCopiarDados($"OK: Arquivo antigo {cliente.Nome} exclu√≠do.");
                     }
                 }
                 catch (Exception ex)
@@ -867,133 +846,166 @@ namespace ExeBoard {
             }
             return true;
         }
-        private void copiarArquivos(string de, string paraClientes, string paraServidores, string paraAtualizadores,
-                                    List<ClienteItem> clientesParaCopiar, List<ServidorItem> servidoresParaCopiar, List<object> atualizadoresParaCopiar)
+        private string EncontrarArquivoNaOrigem(string diretorioRaiz, string nomeArquivo)
         {
-            string dePastaClient = LerValorIni("CAMINHOS", "DE_PASTA_CLIENT", caminhoIni);
-            string dePastaServer = LerValorIni("CAMINHOS", "DE_PASTA_SERVER", caminhoIni);
-            string dePastaDados = LerValorIni("CAMINHOS", "DE_PASTA_DADOS", caminhoIni);
-            // --- LINHAS REMOVIDAS ---
-            // string pastaClient = LerValorIni("CAMINHOS", "PASTA_CLIENT", caminhoIni);
-            // string pastaServer = LerValorIni("CAMINHOS", "PASTA_SERVER", caminhoIni);
-            // string pastaDados = LerValorIni("CAMINHOS", "PASTA_DADOS", caminhoIni);
-            // --- FIM DA REMO«√O ---
+            // 1. Tenta achar direto na raiz
+            string tentativaDireta = Path.Combine(diretorioRaiz, nomeArquivo);
+            if (File.Exists(tentativaDireta)) return tentativaDireta;
 
-            RegistrarLogCopiarDados("Iniciando cÛpia de arquivos via C#...");
-
-            // --- COPIANDO ARQUIVOS DE CLIENTES ---
-            foreach (var cliente in clientesParaCopiar)
-            {
-                string sourcePath = Path.Combine(de, dePastaClient, cliente.SubDiretorios ?? "", cliente.Nome);
-                // --- CORRE«√O: "pastaClient" foi removido do Path.Combine ---
-                string destinationPath = Path.Combine(paraClientes, cliente.SubDiretorios ?? "", cliente.Nome);
-                string destinationDir = Path.GetDirectoryName(destinationPath);
-                CopiarArquivoComLog(sourcePath, destinationPath, destinationDir, cliente.Nome);
-            }
-
-            // --- COPIANDO ARQUIVOS DE SERVIDORES ---
-            foreach (var servidor in servidoresParaCopiar)
-            {
-                if (servidor.ReplicarParaCopia)
-                {
-                    string nomeArquivoParaCopiar = "";
-                    if (servidor.Tipo == "Aplicacao") { nomeArquivoParaCopiar = servidor.Nome; }
-                    else if (servidor.Tipo == "Servico") { nomeArquivoParaCopiar = servidor.Nome + ".exe"; }
-
-                    if (!string.IsNullOrEmpty(nomeArquivoParaCopiar))
-                    {
-                        string sourcePath = Path.Combine(de, dePastaServer, servidor.SubDiretorios ?? "", nomeArquivoParaCopiar);
-                        // --- CORRE«√O: "pastaServer" foi removido do Path.Combine ---
-                        string destinationPath = Path.Combine(paraServidores, servidor.SubDiretorios ?? "", nomeArquivoParaCopiar);
-                        string destinationDir = Path.GetDirectoryName(destinationPath);
-                        CopiarArquivoComLog(sourcePath, destinationPath, destinationDir, nomeArquivoParaCopiar);
-                    }
-                }
-            }
-
-            // --- COPIANDO ATUALIZADORES (Pastas) ---
-            foreach (var item in atualizadoresParaCopiar)
-            {
-                string nomePasta = item.ToString();
-                string sourceDir = Path.Combine(de, dePastaDados, nomePasta);
-                // --- CORRE«√O: "pastaDados" foi removido do Path.Combine ---
-                string destinationDir = Path.Combine(paraAtualizadores, nomePasta);
-
-                CopiarDiretorioComLog(sourceDir, destinationDir, nomePasta);
-            }
-
-            RegistrarLogCopiarDados("CÛpia de arquivos concluÌda.");
-        }
-        private void CopiarArquivoComLog(string sourcePath, string destinationPath, string destinationDir, string nomeArquivo)
-        {
+            // 2. Se n√£o achar, varre todas as subpastas (Recursivo)
             try
             {
-                if (!Directory.Exists(destinationDir))
-                {
-                    Directory.CreateDirectory(destinationDir);
-                    RegistrarLogCopiarDados($"Criado diretÛrio: {destinationDir}", Color.Gray);
-                }
-                File.Copy(sourcePath, destinationPath, true);
+                // SearchOption.AllDirectories faz a m√°gica de descer em todas as pastas
+                var arquivosEncontrados = Directory.GetFiles(diretorioRaiz, nomeArquivo, SearchOption.AllDirectories);
 
-                // --- CORRE«√O: LOG VERDE ---
-                RegistrarLogCopiarDados($"OK: {nomeArquivo} copiado para {Path.GetFileName(destinationDir)}", Color.DarkGreen);
-            }
-            catch (FileNotFoundException)
-            {
-                // --- CORRE«√O: LOG VERMELHO ---
-                RegistrarLogCopiarDados($"ERRO: Arquivo de origem n„o encontrado: {sourcePath}", Color.Red);
-            }
-            catch (DirectoryNotFoundException)
-            {
-                // --- CORRE«√O: LOG VERMELHO ---
-                RegistrarLogCopiarDados($"ERRO: DiretÛrio de origem n„o encontrado para {nomeArquivo}: {Path.GetDirectoryName(sourcePath)}", Color.Red);
+                // Retorna o primeiro que encontrar, ou null se n√£o achar nada
+                return arquivosEncontrados.FirstOrDefault();
             }
             catch (UnauthorizedAccessException)
             {
-                // --- CORRE«√O: LOG VERMELHO ---
-                RegistrarLogCopiarDados($"ERRO: Sem permiss„o para acessar/copiar para {destinationPath}", Color.Red);
+                // Ignora pastas que n√£o temos permiss√£o para ler
+                return null;
+            }
+        }
+
+        // -------------------------------------------------------------------------
+        // NOVO M√âTODO AUXILIAR: Indexa todos os arquivos de uma pasta (Super R√°pido)
+        // -------------------------------------------------------------------------
+        private Dictionary<string, string> IndexarDiretorio(string diretorioRaiz)
+        {
+            Dictionary<string, string> mapaArquivos = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            if (!Directory.Exists(diretorioRaiz))
+                return mapaArquivos;
+
+            try
+            {
+                // Pega TODOS os arquivos de uma vez s√≥ (muito mais r√°pido que buscar um por um)
+                // Usamos SearchOption.AllDirectories para descer em todas as subpastas
+                string[] arquivos = Directory.GetFiles(diretorioRaiz, "*.*", SearchOption.AllDirectories);
+
+                foreach (string arquivo in arquivos)
+                {
+                    string nomeArquivo = Path.GetFileName(arquivo);
+
+                    // Se houver duplicados, mantemos o primeiro encontrado ou o mais raso
+                    if (!mapaArquivos.ContainsKey(nomeArquivo))
+                    {
+                        mapaArquivos.Add(nomeArquivo, arquivo);
+                    }
+                }
             }
             catch (Exception ex)
             {
-                // --- CORRE«√O: LOG VERMELHO ---
-                RegistrarLogCopiarDados($"ERRO ao copiar {nomeArquivo}: {ex.Message}", Color.Red);
+                RegistrarLogCopiarDados($"AVISO: N√£o foi poss√≠vel indexar totalmente a pasta {diretorioRaiz}. Erro: {ex.Message}", Color.Orange);
             }
-        }
-        // Nova assinatura: recebe caminho como par‚metro
-        // Assinatura modificada para receber caminho e lista
-        private void iniciarServidores(string caminhoServidorDestino, List<ServidorItem> servidoresParaIniciar)
-        {
-            // string pastaServerIni = LerValorIni("CAMINHOS", "PASTA_SERVER", caminhoIni); // <-- REMOVIDO
 
-            foreach (var servidor in servidoresParaIniciar)
+            return mapaArquivos;
+        }
+
+        // -------------------------------------------------------------------------
+        // M√âTODO DE C√ìPIA OTIMIZADO (Substitua o antigo 'copiarArquivos' por este)
+        // -------------------------------------------------------------------------
+        // Mude a assinatura para receber 'caminhoRaizBranch' separado de 'caminhoOrigemExes'
+        private void copiarArquivos(string caminhoOrigemExes, string caminhoRaizBranch, string paraClientes, string paraServidores, string paraAtualizadores,
+                                    List<ClienteItem> clientesParaCopiar, List<ServidorItem> servidoresParaCopiar, List<object> atualizadoresParaCopiar)
+        {
+            string dePastaDados = LerValorIni("CAMINHOS", "DE_PASTA_DADOS", caminhoIni);
+            bool houveAprendizado = false;
+
+            RegistrarLogCopiarDados("------------------------------------------------");
+            RegistrarLogCopiarDados($"Origem dos Execut√°veis: {Path.GetFileName(caminhoOrigemExes)}", Color.Blue);
+
+            // Indexa a pasta ESPEC√çFICA (Exes ou ExesAutomacao)
+            var mapaOrigem = IndexarDiretorio(caminhoOrigemExes);
+
+            var mapaDestinoClientes = IndexarDiretorio(paraClientes);
+            var mapaDestinoServidores = IndexarDiretorio(paraServidores);
+
+            // ... (O resto da l√≥gica de Clientes e Servidores continua igual, pois usam o 'mapaOrigem') ...
+            // ...
+            // ...
+
+            // --- CORRE√á√ÉO NA C√ìPIA DE DADOS (ATUALIZADORES) ---
+            // Os atualizadores (BD) geralmente n√£o est√£o dentro de 'Exes', est√£o na raiz ou em 'BD'.
+            // Ent√£o usamos 'caminhoRaizBranch' aqui.
+            foreach (var item in atualizadoresParaCopiar)
+            {
+                string nomePasta = item.ToString();
+
+                // Tenta achar em Branch/BD/NomePasta
+                string sourceDir = Path.Combine(caminhoRaizBranch, dePastaDados, nomePasta);
+
+                // Se n√£o achar, tenta em Branch/NomePasta
+                if (!Directory.Exists(sourceDir)) sourceDir = Path.Combine(caminhoRaizBranch, nomePasta);
+
+                string destinationDir = Path.Combine(paraAtualizadores, nomePasta);
+                CopiarDiretorioComLog(sourceDir, destinationDir, nomePasta);
+            }
+
+            // ... (Resto do c√≥digo igual) ...
+        }
+        private void CopiarArquivoComLog(string sourcePath, string destinationPath, string destinationDir, string nomeArquivo)
+        {
+            int tentativas = 0;
+            int maxTentativas = 5;
+            bool sucesso = false;
+
+            while (tentativas < maxTentativas && !sucesso)
             {
                 try
                 {
-                    if (servidor.Tipo == "Servico")
+                    if (!Directory.Exists(destinationDir))
                     {
-                        // ... (LÛgica de iniciar serviÁo permanece igual) ...
+                        Directory.CreateDirectory(destinationDir);
                     }
-                    else if (servidor.Tipo == "Aplicacao")
-                    {
-                        // --- CORRE«√O: "pastaServerIni" foi removido do Path.Combine ---
-                        string caminhoCompletoExeDestino = Path.Combine(caminhoServidorDestino, servidor.SubDiretorios ?? "", servidor.Nome);
 
-                        Process.Start(new ProcessStartInfo
+                    // PREVEN√á√ÉO DE ERRO: Garante que o arquivo destino n√£o esteja como 'Somente Leitura'
+                    if (File.Exists(destinationPath))
+                    {
+                        FileInfo fi = new FileInfo(destinationPath);
+                        if (fi.IsReadOnly)
                         {
-                            FileName = caminhoCompletoExeDestino,
-                            UseShellExecute = true
-                        });
-                        RegistrarLogCopiarDados("Iniciou a aplicacao " + servidor.Nome);
+                            fi.IsReadOnly = false;
+                        }
                     }
+
+                    File.Copy(sourcePath, destinationPath, true);
+                    sucesso = true; // Se passar daqui, deu certo
+
+                    // Pinta de verde (sucesso)
+                    RegistrarLogCopiarDados($"OK: {nomeArquivo} copiado para {Path.GetFileName(destinationDir)}", Color.DarkGreen);
+                }
+                catch (IOException)
+                {
+                    // Erro de arquivo em uso (o famoso 'Fun√ß√£o Incorreta' ou 'Arquivo em uso')
+                    tentativas++;
+                    RegistrarLogCopiarDados($"   -> Arquivo {nomeArquivo} em uso ou bloqueado. Tentativa {tentativas}/{maxTentativas}...", Color.Orange);
+                    Thread.Sleep(2000); // Espera 2 segundos antes de tentar de novo
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    RegistrarLogCopiarDados($"ERRO: Sem permiss√£o para acessar {destinationPath}. Tentando liberar...", Color.Red);
+                    // Tenta remover atributos e tenta de novo na pr√≥xima volta do loop
+                    try
+                    {
+                        new FileInfo(destinationPath).Attributes = FileAttributes.Normal;
+                    }
+                    catch { }
+                    tentativas++;
+                    Thread.Sleep(1000);
                 }
                 catch (Exception ex)
                 {
-                    RegistrarLogCopiarDados($"Erro ao iniciar {servidor.Tipo.ToLower()} {servidor.Nome}: {ex.Message}");
+                    RegistrarLogCopiarDados($"ERRO FATAL ao copiar {nomeArquivo}: {ex.Message}", Color.Red);
+                    break; // Erro desconhecido, aborta este arquivo
                 }
             }
 
-            RegistrarLogCopiarDados("Sistema pronto para uso...");
-            RegistrarLogCopiarDados("Se necess·rio, atualize o banco de dados a ser utilizado...");
+            if (!sucesso)
+            {
+                RegistrarLogCopiarDados($"FALHA FINAL: N√£o foi poss√≠vel copiar {nomeArquivo} ap√≥s {maxTentativas} tentativas.", Color.Red);
+            }
         }
         protected override void OnResize(EventArgs e)
         {
@@ -1014,28 +1026,34 @@ namespace ExeBoard {
 
         private void notifyIcon1_MouseDoubleClick(object sender, MouseEventArgs e)
         {
-            this.Show(); // mostra novamente o formul·rio
-            this.WindowState = FormWindowState.Normal; // restaura se estava minimizado
-            this.BringToFront(); // garante que venha para frente
-            icBandeja.Visible = false; // opcional: esconde o Ìcone da bandeja
+            this.Show();
+            this.WindowState = FormWindowState.Normal;
+            this.BringToFront();
+            icBandeja.Visible = false;
         }
 
         private void frmCopiarExes_FormClosing(object sender, FormClosingEventArgs e)
         {
+            // Se clicou em "Fechar" no menu da bandeja, fecha direto
+            if (forcarFechamento) return;
+
+            // Sen√£o, aplica a l√≥gica de minimizar para a bandeja
+            SalvarCaminhosDaTela();
             string rodarNaBandeja = LerValorIni("CONFIG_GERAIS", "RODAR_NA_BANDEJA", this.caminhoIni);
 
             if (rodarNaBandeja == "Sim")
             {
-                // Se o usu·rio clicou no X (CloseButton)
                 if (e.CloseReason == CloseReason.UserClosing)
                 {
-                    e.Cancel = true;          // Cancela o fechamento
-                    this.Hide();              // Esconde a janela
-                    icBandeja.Visible = true; // MantÈm o Ìcone na bandeja
+                    e.Cancel = true;
+                    this.Hide();
+                    icBandeja.Visible = true;
+
+                    // Opcional: Mostrar bal√£ozinho
+                    icBandeja.ShowBalloonTip(3000, "ExeBoard", "A aplica√ß√£o continua rodando aqui.", ToolTipIcon.Info);
                 }
             }
         }
-
         private void button1_Click(object sender, EventArgs e)
         {
             List<Atualizador> atualizadores = new List<Atualizador>();
@@ -1097,7 +1115,7 @@ namespace ExeBoard {
             {
                 new Colaborador { Nome = "Fernando Bolson Dias",
                     Funcao = "Arquiteto de Software",
-                    GitHub = "N„o informado"},
+                    GitHub = "N√£o informado"},
 
             new Colaborador { Nome = "Giancarlo Abel Giulian",
                 Funcao = "Analista de Testes",
@@ -1117,7 +1135,6 @@ namespace ExeBoard {
         {
             try
             {
-                // Abre o link no navegador padr„o
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = "https://github.com/nicochet01/CopiarExes",
@@ -1226,10 +1243,10 @@ namespace ExeBoard {
 
         private void btnLimparLog_Click(object sender, EventArgs e)
         {
-            rtbLog.Clear(); // Limpa a tela
+            rtbLog.Clear();
             lock (listaDeLogs)
             {
-                listaDeLogs.Clear(); // Limpa a memÛria
+                listaDeLogs.Clear();
             }
         }
 
@@ -1239,10 +1256,8 @@ namespace ExeBoard {
             {
                 CarregarServidoresNoGroupBox();
             }
-            // ADICIONE ESTA NOVA VERIFICA«√O "ELSE IF" ABAIXO
             else if (tabCopiarExes.SelectedTab == tabConfiguracoes)
             {
-                // Esta chamada vai "acender" e EXECUTAR o seu mÈtodo
                 CarregarDadosDeConfiguracao();
             }
 
@@ -1250,95 +1265,103 @@ namespace ExeBoard {
 
         private void CarregarServidoresNoGroupBox()
         {
-            groupboxServidores.Controls.Clear(); // limpa os controles anteriores
-            int y = 30; // posiÁ„o vertical inicial
+            groupboxServidores.Controls.Clear();
+            int y = 30;
 
-            // --- INÕCIO DA CORRE«√O ---
-            // Agora lemos DIRETAMENTE do .INI, n„o da lista cbGroupServidores.
-            // Isso garante que TODOS os servidores (Exe e ServiÁo) apareÁam aqui,
-            // independentemente da flag "Replicar".
+            // Carrega do INI
             string countStr = LerValorIni("APLICACOES_SERVIDORAS", "Count", caminhoIni);
+            List<ServidorItem> listaServidores = new List<ServidorItem>();
+
             if (int.TryParse(countStr, out int count))
             {
                 for (int i = 0; i < count; i++)
                 {
-                    string servidorNome = LerValorIni("APLICACOES_SERVIDORAS", $"Servidor{i}", caminhoIni);
+                    string nome = LerValorIni("APLICACOES_SERVIDORAS", $"Servidor{i}", caminhoIni);
                     string tipo = LerValorIni("APLICACOES_SERVIDORAS", $"Tipo{i}", caminhoIni);
-                    string subDir = LerValorIni("APLICACOES_SERVIDORAS", $"SubDiretorios{i}", caminhoIni);
-                    string replicar = LerValorIni("APLICACOES_SERVIDORAS", $"Replicar{i}", caminhoIni);
+                    string sub = LerValorIni("APLICACOES_SERVIDORAS", $"SubDiretorios{i}", caminhoIni);
 
-                    if (!string.IsNullOrWhiteSpace(servidorNome) && !string.IsNullOrWhiteSpace(tipo))
+                    if (!string.IsNullOrWhiteSpace(nome))
                     {
-                        // Criamos o objeto ServidorItem com todas as informaÁıes lidas
-                        ServidorItem servidor = new ServidorItem
-                        {
-                            Nome = servidorNome,
-                            Tipo = tipo,
-                            ReplicarParaCopia = string.Equals(replicar, "Sim", StringComparison.OrdinalIgnoreCase),
-                            SubDiretorios = subDir
-                        };
-
-                        // O resto da lÛgica para criar os controles visuais continua...
-                        CheckBox chk = new CheckBox();
-                        chk.Text = servidor.Nome;
-                        chk.Tag = servidor;
-                        chk.Font = new Font("Segoe UI", 12, FontStyle.Regular);
-                        chk.Location = new Point(10, y);
-                        chk.AutoSize = true;
-
-                        Label lblStatus = new Label();
-                        lblStatus.Location = new Point(200, y + 1);
-                        lblStatus.Font = new Font("Segoe UI", 12, FontStyle.Bold);
-                        lblStatus.AutoSize = true;
-
-                        string status = ObterStatusServidor(servidor);
-
-                        lblStatus.Text = status;
-                        lblStatus.Tag = status;
-                        chk.Tag = (servidor, lblStatus);
-                        chk.CheckedChanged += (s, e) => AtualizarBotoes();
-
-                        AtualizarStatus(lblStatus, status);
-                        groupboxServidores.Controls.Add(chk);
-                        groupboxServidores.Controls.Add(lblStatus);
-
-                        y += 25;
+                        listaServidores.Add(new ServidorItem { Nome = nome, Tipo = tipo, SubDiretorios = sub });
                     }
                 }
             }
-            // --- FIM DA CORRE«√O ---
+
+            listaServidores = listaServidores.OrderBy(x => x.Nome).ToList();
+
+            foreach (var servidor in listaServidores)
+            {
+                CheckBox chk = new CheckBox();
+                chk.Text = servidor.Nome;
+                chk.Font = new Font("Segoe UI", 11, FontStyle.Regular);
+                chk.Location = new Point(10, y);
+                chk.AutoSize = true;
+
+                Label lblStatus = new Label();
+                lblStatus.Location = new Point(250, y);
+                lblStatus.AutoSize = true;
+                // Fonte maior para a bolinha ficar bonita
+                lblStatus.Font = new Font("Segoe UI", 16, FontStyle.Bold);
+
+                // --- PREPARA√á√ÉO DO TOOLTIP E STATUS OCULTO ---
+                ToolTip tip = new ToolTip();
+                lblStatus.Tag = tip; // Guardamos o tooltip no Tag para usar depois
+
+                // Pega o status inicial
+                string status = ObterStatusServidor(servidor);
+
+                // Salva as refer√™ncias no CheckBox para os bot√µes acharem
+                chk.Tag = (servidor, lblStatus);
+                chk.CheckedChanged += (s, e) => AtualizarBotoes();
+
+                // Aplica a cor e o AccessibleName
+                AtualizarStatus(lblStatus, status);
+
+                groupboxServidores.Controls.Add(chk);
+                groupboxServidores.Controls.Add(lblStatus);
+
+                y += 35; // Aumentei um pouco o espa√ßamento vertical
+            }
 
             AtualizarBotoes();
-            timerStatusServidores.Interval = 1000; // 1 segundo
+            timerStatusServidores.Interval = 2000;
             timerStatusServidores.Tick += timerStatusServidores_Tick;
             timerStatusServidores.Start();
-
-            RegistrarLogServidores("Atualizou o status dos servidores.");
         }
+        // TAREFA 3 (Ajuste): Status Minimalista (S√≥ a Bolinha)
         private void AtualizarStatus(Label lblStatus, string status)
         {
-            lblStatus.Text = status;
+            string simbolo = "‚óè";
+            Color cor = Color.Gray;
 
             switch (status)
             {
                 case "Iniciado":
-                    lblStatus.ForeColor = Color.Green;
+                    cor = Color.LimeGreen;
                     break;
                 case "Parado":
-                    lblStatus.ForeColor = Color.Red;
+                    cor = Color.Red;
                     break;
-                case "N„o Encontrado":
-                    lblStatus.ForeColor = Color.DarkGoldenrod;
+                case "Reiniciando": // NOVO CASO
+                    cor = Color.Gold; // Amarelo para indicar transi√ß√£o
                     break;
-                case "Desconhecido":
-                    lblStatus.ForeColor = Color.DarkGray;
+                case "N√£o Encontrado":
+                    cor = Color.Gray;
                     break;
                 default:
-                    lblStatus.ForeColor = Color.Black;
+                    cor = Color.Gold; // Fallback tamb√©m amarelo
                     break;
             }
-        }
 
+            lblStatus.Text = simbolo;
+            lblStatus.ForeColor = cor;
+            lblStatus.AccessibleName = status;
+
+            if (lblStatus.Tag is ToolTip tip)
+            {
+                tip.SetToolTip(lblStatus, status);
+            }
+        }
         private string ObterStatusServidor(ServidorItem servidor)
         {
             try
@@ -1351,53 +1374,44 @@ namespace ExeBoard {
                         case ServiceControllerStatus.Running:
                             return "Iniciado";
                         case ServiceControllerStatus.Stopped:
-                            return "Parado"; // Corrigido (removido 'return' duplicado)
+                            return "Parado";
                         default:
                             return sc.Status.ToString();
                     }
                 }
                 else if (servidor.Tipo == "Aplicacao")
                 {
-                    // --- INÕCIO DA CORRE«√O 2 (Verificar processo, n„o iniciar) ---
-                    // Removemos o Process.Start que causava o loop infinito
 
                     string nomeProcesso = Path.GetFileNameWithoutExtension(servidor.Nome);
 
-                    // Procura por processos com esse nome
                     Process[] processos = Process.GetProcessesByName(nomeProcesso);
 
                     if (processos.Length > 0)
                     {
-                        // Se encontrou (pelo menos um), est· "Iniciado"
                         return "Iniciado";
                     }
                     else
                     {
-                        // Se n„o encontrou nenhum, est· "Parado"
                         return "Parado";
                     }
-                    // --- FIM DA CORRE«√O 2 ---
                 }
             }
             catch (InvalidOperationException)
             {
-                // Ocorre se o serviÁo (sc.Status) n„o for encontrado no Windows
-                return "N„o Encontrado";
+                return "N√£o Encontrado";
             }
             catch (Exception)
             {
-                // Captura outros erros (ex: acesso negado)
                 return "Desconhecido";
             }
 
-            return "Desconhecido"; // Fallback
+            return "Desconhecido";
         }
 
         private void chkSelecionarEmExecucao_CheckedChanged(object sender, EventArgs e)
         {
-            if (cbSelecionarParados.Checked)
+            if (cbEmExecucao.Checked)
             {
-                // Desmarca a outra opÁ„o para evitar conflito
                 cbSelecionarParados.Checked = false;
             }
 
@@ -1409,24 +1423,21 @@ namespace ExeBoard {
 
                     if (cbEmExecucao.Checked)
                     {
-                        // Marca apenas os que est„o "Iniciado"
-                        chk.Checked = string.Equals(lblStatus.Text, "Iniciado", StringComparison.OrdinalIgnoreCase);
+                        // CORRE√á√ÉO: Usa AccessibleName
+                        chk.Checked = string.Equals(lblStatus.AccessibleName, "Iniciado", StringComparison.OrdinalIgnoreCase);
                     }
                     else
                     {
-                        // Se desmarcar a opÁ„o, limpa todos
                         chk.Checked = false;
                     }
                 }
             }
-
             AtualizarBotoes();
         }
         private void cbSelecionarParados_CheckedChanged(object sender, EventArgs e)
         {
             if (cbSelecionarParados.Checked)
             {
-                // Desmarca a outra opÁ„o para evitar conflito
                 cbEmExecucao.Checked = false;
             }
 
@@ -1438,17 +1449,15 @@ namespace ExeBoard {
 
                     if (cbSelecionarParados.Checked)
                     {
-                        // Marca apenas os que est„o "Parado"
-                        chk.Checked = string.Equals(lblStatus.Text, "Parado", StringComparison.OrdinalIgnoreCase);
+                        // CORRE√á√ÉO: Usa AccessibleName
+                        chk.Checked = string.Equals(lblStatus.AccessibleName, "Parado", StringComparison.OrdinalIgnoreCase);
                     }
                     else
                     {
-                        // Se desmarcar a opÁ„o, limpa todos
                         chk.Checked = false;
                     }
                 }
             }
-
             AtualizarBotoes();
         }
         private void AtualizarBotoes()
@@ -1462,12 +1471,13 @@ namespace ExeBoard {
                 if (chk.Checked && chk.Tag is ValueTuple<ServidorItem, Label> dados)
                 {
                     Label lblStatus = dados.Item2;
-                    string status = lblStatus.Text;
+                    // CORRE√á√ÉO: L√™ AccessibleName em vez de Text
+                    string status = lblStatus.AccessibleName;
 
                     if (status == "Parado")
                     {
                         podeIniciar = true;
-                        podeReiniciar = true;
+                        podeReiniciar = true; // Reiniciar parado = Iniciar
                     }
                     else if (status == "Iniciado")
                     {
@@ -1475,14 +1485,12 @@ namespace ExeBoard {
                         podeReiniciar = true;
                     }
                 }
-
             }
 
             btnIniciar.Enabled = podeIniciar;
             btnParar.Enabled = podeParar;
             btnReiniciar.Enabled = podeReiniciar;
         }
-
         private void btnIniciar_Click(object sender, EventArgs e)
         {
             foreach (var chk in groupboxServidores.Controls.OfType<CheckBox>())
@@ -1492,19 +1500,15 @@ namespace ExeBoard {
                     ServidorItem servidor = dados.Item1;
                     Label lblStatus = dados.Item2;
 
-                    if (lblStatus.Text == "Parado")
+                    // CORRE√á√ÉO: Usa AccessibleName
+                    if (lblStatus.AccessibleName == "Parado")
                     {
-                        // --- INÕCIO DA CORRE«√O ---
-                        // Chamar o mÈtodo helper que j· tem a lÛgica correta
                         IniciarServidor(servidor, false);
-                        // Atualiza visualmente apÛs a tentativa
-                        string status = ObterStatusServidor(servidor);
-                        AtualizarStatus(lblStatus, status);
-                        // --- FIM DA CORRE«√O ---
+                        // Atualiza status for√ßado para feedback visual imediato
+                        AtualizarStatus(lblStatus, "Iniciado");
                     }
                 }
             }
-
             cbSelecionarParados.Checked = false;
             cbEmExecucao.Checked = false;
             AtualizarBotoes();
@@ -1518,48 +1522,61 @@ namespace ExeBoard {
                     ServidorItem servidor = dados.Item1;
                     Label lblStatus = dados.Item2;
 
-                    if (lblStatus.Text == "Iniciado")
+                    // CORRE√á√ÉO: Usa AccessibleName
+                    if (lblStatus.AccessibleName == "Iniciado")
                     {
-                        // --- INÕCIO DA CORRE«√O ---
-                        // Chamar o mÈtodo helper que j· tem a lÛgica correta
                         PararServidor(servidor, false);
-                        // Atualiza visualmente apÛs a tentativa
-                        string status = ObterStatusServidor(servidor);
-                        AtualizarStatus(lblStatus, status);
-                        // --- FIM DA CORRE«√O ---
+                        AtualizarStatus(lblStatus, "Parado");
                     }
                 }
             }
-
             cbSelecionarParados.Checked = false;
             cbEmExecucao.Checked = false;
             AtualizarBotoes();
         }
         private void btnReiniciar_Click(object sender, EventArgs e)
         {
-            foreach (var chk in groupboxServidores.Controls.OfType<CheckBox>())
-            {
-                if (chk.Checked && chk.Tag is ValueTuple<ServidorItem, Label> dados)
-                {
-                    ServidorItem servidor = dados.Item1;
-                    Label lblStatus = dados.Item2;
+            // Bloqueia o bot√£o apenas para evitar cliques duplos, mas mant√©m a cor original
+            btnReiniciar.Enabled = false;
 
-                    if (lblStatus.Text == "Iniciado" || lblStatus.Text == "Parado")
+            try
+            {
+                foreach (var chk in groupboxServidores.Controls.OfType<CheckBox>())
+                {
+                    if (chk.Checked && chk.Tag is ValueTuple<ServidorItem, Label> dados)
                     {
-                        // --- INÕCIO DA CORRE«√O ---
-                        // Chamar o mÈtodo helper que j· tem a lÛgica correta
-                        ReiniciarServidor(servidor, false);
-                        // Atualiza visualmente apÛs a tentativa
-                        string status = ObterStatusServidor(servidor);
-                        AtualizarStatus(lblStatus, status);
-                        // --- FIM DA CORRE«√O ---
+                        ServidorItem servidor = dados.Item1;
+                        Label lblStatus = dados.Item2;
+                        string status = lblStatus.AccessibleName;
+
+                        if (status == "Iniciado" || status == "Parado")
+                        {
+                            // 1. MUDA A BOLINHA PARA AMARELO (REINICIANDO)
+                            AtualizarStatus(lblStatus, "Reiniciando");
+
+                            // 2. FOR√áA O WINDOWS A PINTAR A BOLINHA AGORA
+                            // (Sem isso, ele trava a tela e s√≥ pinta no final)
+                            Application.DoEvents();
+
+                            // 3. REALIZA O PROCESSO DEMORADO
+                            ReiniciarServidor(servidor, false);
+
+                            // 4. VOLTA A BOLINHA PARA VERDE
+                            AtualizarStatus(lblStatus, "Iniciado");
+                        }
                     }
                 }
             }
+            finally
+            {
+                // Libera o bot√£o novamente
+                btnReiniciar.Enabled = true;
 
-            cbSelecionarParados.Checked = false;
-            cbEmExecucao.Checked = false;
-            AtualizarBotoes();
+                // Limpa sele√ß√µes
+                cbSelecionarParados.Checked = false;
+                cbEmExecucao.Checked = false;
+                AtualizarBotoes();
+            }
         }
         private void timerStatusServidores_Tick(object sender, EventArgs e)
         {
@@ -1570,18 +1587,19 @@ namespace ExeBoard {
                     ServidorItem servidor = dados.Item1;
                     Label lblStatus = dados.Item2;
 
-                    string statusAtual = ObterStatusServidor(servidor);
+                    string statusReal = ObterStatusServidor(servidor);
 
-                    if (lblStatus.Text != statusAtual)
+                    // CORRE√á√ÉO: Comparamos com AccessibleName (que guarda "Iniciado") 
+                    // e n√£o com .Text (que guarda "‚óè")
+                    if (lblStatus.AccessibleName != statusReal)
                     {
-                        AtualizarStatus(lblStatus, statusAtual);
+                        AtualizarStatus(lblStatus, statusReal);
                     }
                 }
             }
-
+            // Garante que os bot√µes (Iniciar/Parar) fiquem habilitados/desabilitados corretamente
             AtualizarBotoes();
         }
-
         private void button2_Click(object sender, EventArgs e)
         {
 
@@ -1603,19 +1621,17 @@ namespace ExeBoard {
 
         private void btnRemoverGlobal_Click(object sender, EventArgs e)
         {
-            // Adiciona a contagem da nova lista
             int totalSelecionado = clbClientes.CheckedItems.Count + clbServidores.CheckedItems.Count + clbAtualizadores.CheckedItems.Count;
 
             if (totalSelecionado > 0)
             {
-                if (MessageBox.Show($"VocÍ tem certeza que deseja remover {totalSelecionado} item(ns) selecionado(s)?", "Confirmar RemoÁ„o", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                if (MessageBox.Show($"Voc√™ tem certeza que deseja remover {totalSelecionado} item(ns) selecionado(s)?", "Confirmar Remo√ß√£o", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
                 {
-                    // Adiciona o loop para remover da nova lista
                     while (clbClientes.CheckedItems.Count > 0) { clbClientes.Items.Remove(clbClientes.CheckedItems[0]); }
                     while (clbServidores.CheckedItems.Count > 0) { clbServidores.Items.Remove(clbServidores.CheckedItems[0]); }
                     while (clbAtualizadores.CheckedItems.Count > 0) { clbAtualizadores.Items.Remove(clbAtualizadores.CheckedItems[0]); }
 
-                    RegistrarLogCopiarDados($"{totalSelecionado} item(ns) removido(s) da lista de configuraÁ„o.");
+                    RegistrarLogCopiarDados($"{totalSelecionado} item(ns) removido(s) da lista de configura√ß√£o.");
                     configuracoesForamAlteradas = true;
                     AtualizarEstadoBotoesConfig();
                 }
@@ -1623,15 +1639,14 @@ namespace ExeBoard {
         }
         private void btnSalvarConfiguracoes_Click(object sender, EventArgs e)
         {
-            if (MessageBox.Show("Deseja salvar as alteraÁıes no arquivo de configuraÁ„o?", "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.No)
+            if (MessageBox.Show("Deseja salvar as altera√ß√µes no arquivo de configura√ß√£o?", "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.No)
             {
                 return;
             }
             try
             {
-                RegistrarLogCopiarDados("Salvando alteraÁıes no arquivo Inicializar.ini...");
+                RegistrarLogCopiarDados("Salvando altera√ß√µes no arquivo Inicializar.ini...");
 
-                // --- SALVANDO APLICA«’ES CLIENTE (cÛdigo existente) ---
                 WritePrivateProfileString("APLICACOES_CLIENTE", null, null, caminhoIni);
                 int i = 0;
                 foreach (ClienteItem item in clbClientes.Items)
@@ -1643,7 +1658,6 @@ namespace ExeBoard {
                 }
                 WritePrivateProfileString("APLICACOES_CLIENTE", "Count", clbClientes.Items.Count.ToString(), caminhoIni);
 
-                // --- SALVANDO APLICA«’ES/SERVI«OS SERVIDORES (cÛdigo existente) ---
                 WritePrivateProfileString("APLICACOES_SERVIDORAS", null, null, caminhoIni);
                 i = 0;
                 foreach (ServidorItem item in clbServidores.Items)
@@ -1656,44 +1670,39 @@ namespace ExeBoard {
                 }
                 WritePrivateProfileString("APLICACOES_SERVIDORAS", "Count", clbServidores.Items.Count.ToString(), caminhoIni);
 
-                // --- INÕCIO DA NOVA L”GICA ---
-                // --- SALVANDO ATUALIZADORES/BANCOS (Novo Formato) ---
                 WritePrivateProfileString("BANCO_DE_DADOS", null, null, caminhoIni);
                 i = 0;
                 foreach (string item in clbAtualizadores.Items)
                 {
-                    // Salva no novo formato "BancoX"
                     WritePrivateProfileString("BANCO_DE_DADOS", $"Banco{i}", item, caminhoIni);
                     i++;
                 }
                 WritePrivateProfileString("BANCO_DE_DADOS", "Count", clbAtualizadores.Items.Count.ToString(), caminhoIni);
-                // --- FIM DA NOVA L”GICA ---
 
                 configuracoesForamAlteradas = false;
                 AtualizarEstadoBotoesConfig();
-                RegistrarLogCopiarDados("AlteraÁıes salvas com sucesso.");
-                MessageBox.Show("AlteraÁıes salvas com sucesso!", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                RegistrarLogCopiarDados("Altera√ß√µes salvas com sucesso.");
+                MessageBox.Show("Altera√ß√µes salvas com sucesso!", "Sucesso", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                 RegistrarLogCopiarDados("Atualizando listas da aba principal...");
                 CarregarClientes();
                 CarregarServidores();
-                CarregarBancoDeDados(); // Adiciona a recarga dos bancos
-                RegistrarLogCopiarDados("Listas da aba principal atualizadas com as novas configuraÁıes.");
+                CarregarBancoDeDados();
+                RegistrarLogCopiarDados("Listas da aba principal atualizadas com as novas configura√ß√µes.");
             }
             catch (Exception ex)
             {
-                RegistrarLogCopiarDados($"Erro ao salvar o arquivo de configuraÁ„o: {ex.Message}");
-                MessageBox.Show($"Ocorreu um erro ao salvar o arquivo de configuraÁ„o:\n\n{ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                RegistrarLogCopiarDados($"Erro ao salvar o arquivo de configura√ß√£o: {ex.Message}");
+                MessageBox.Show($"Ocorreu um erro ao salvar o arquivo de configura√ß√£o:\n\n{ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
         private void btnCancelarAlteracoes_Click(object sender, EventArgs e)
         {
             CarregarDadosDeConfiguracao();
-            RegistrarLogCopiarDados("AlteraÁıes nas configuraÁıes foram canceladas.");
+            RegistrarLogCopiarDados("Altera√ß√µes nas configura√ß√µes foram canceladas.");
         }
         private void AtualizarEstadoBotoesConfig()
         {
-            // Adiciona a verificaÁ„o da nova lista
             bool temItensMarcados = clbClientes.CheckedItems.Count > 0 || clbServidores.CheckedItems.Count > 0 || clbAtualizadores.CheckedItems.Count > 0;
 
             btnRemoverGlobal.Enabled = temItensMarcados;
@@ -1702,67 +1711,97 @@ namespace ExeBoard {
         }
         private void btnAdicionarExeServidor_Click(object sender, EventArgs e)
         {
+            DialogResult origem = MessageBox.Show(
+                "Deseja buscar o arquivo na pasta de ORIGEM (Branch/Rede)?\n\n" +
+                "‚Ä¢ SIM: Buscar na Origem (Instala√ß√£o Nova)\n" +
+                "‚Ä¢ N√ÉO: Buscar Local (Arquivo j√° existe no PC)",
+                "Selecionar Local", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+
+            if (origem == DialogResult.Cancel) return;
+
+            string diretorioInicial;
+            if (origem == DialogResult.Yes)
+            {
+                diretorioInicial = edtCaminhoBranch.Text;
+                if (string.IsNullOrWhiteSpace(diretorioInicial) || !Directory.Exists(diretorioInicial))
+                {
+                    MessageBox.Show("A pasta de Origem n√£o est√° definida.", "Aviso");
+                    return;
+                }
+            }
+            else
+            {
+                string ultimo = LerValorIni("ULTIMOS_CAMINHOS", "UltimoCaminhoAdicionarServidor", caminhoIni);
+                diretorioInicial = (!string.IsNullOrEmpty(ultimo) && Directory.Exists(ultimo)) ? ultimo : txtDestinoServidores.Text;
+            }
+
             using (OpenFileDialog dialogo = new OpenFileDialog())
             {
-                dialogo.Title = "Selecione a(s) AplicaÁ„o(ıes) Servidora (.exe)";
-                dialogo.Filter = "AplicaÁıes (*.exe)|*.exe";
+                dialogo.Title = "Selecione a(s) Aplica√ß√£o(√µes) Servidora";
+                dialogo.Filter = "Execut√°veis (*.exe)|*.exe";
                 dialogo.Multiselect = true;
-                // ... (o resto da configuraÁ„o do di·logo est· OK) ...
+                dialogo.InitialDirectory = diretorioInicial;
 
                 if (dialogo.ShowDialog() == DialogResult.OK)
                 {
+                    if (origem == DialogResult.No)
+                    {
+                        WritePrivateProfileString("ULTIMOS_CAMINHOS", "UltimoCaminhoAdicionarServidor", Path.GetDirectoryName(dialogo.FileNames[0]), caminhoIni);
+                    }
+
+                    // --- CORRE√á√ÉO DA HERAN√áA DE PASTA ---
+                    string subDiretorioPadrao = "";
+
+                    // MUDAN√áA: Procura o primeiro que N√ÉO SEJA vazio
+                    var itemComPasta = clbServidores.Items.OfType<ServidorItem>()
+                                        .FirstOrDefault(s => !string.IsNullOrEmpty(s.SubDiretorios));
+
+                    if (itemComPasta != null)
+                    {
+                        subDiretorioPadrao = itemComPasta.SubDiretorios;
+                    }
+                    // ------------------------------------
+
                     int adicionados = 0;
                     foreach (string caminhoCompleto in dialogo.FileNames)
                     {
-                        string nomeDoArquivoExe = Path.GetFileName(caminhoCompleto);
+                        string nomeArquivo = Path.GetFileName(caminhoCompleto);
 
-                        // --- INÕCIO DA SUA NOVA IDEIA ---
-                        DialogResult resultado = MessageBox.Show(
-                            $"O arquivo '{nomeDoArquivoExe}' roda como um ServiÁo do Windows?\n\n" +
-                            "Sim = Ser· parado/iniciado como 'ServiÁo' (Ex: ViasoftServerAgroX)\n" +
-                            "N„o = Ser· parado/iniciado como 'AplicaÁ„o' (Ex: um .exe comum)",
+                        bool jaExiste = clbServidores.Items.OfType<ServidorItem>()
+                            .Any(x => x.Nome.Equals(Path.GetFileNameWithoutExtension(nomeArquivo), StringComparison.OrdinalIgnoreCase)
+                                   || x.Nome.Equals(nomeArquivo, StringComparison.OrdinalIgnoreCase));
+
+                        if (jaExiste) continue;
+
+                        DialogResult ehServico = MessageBox.Show(
+                            $"O arquivo '{nomeArquivo}' roda como um Servi√ßo do Windows?\n\n" +
+                            "‚Ä¢ SIM = Servi√ßo (ViasoftServerAgroX)\n" +
+                            "‚Ä¢ N√ÉO = Aplica√ß√£o Comum (.exe)",
                             "Tipo de Servidor",
                             MessageBoxButtons.YesNo,
-                            MessageBoxIcon.Question
-                        );
+                            MessageBoxIcon.Question);
 
-                        string nomeParaSalvar;
-                        string tipo;
+                        string tipo = (ehServico == DialogResult.Yes) ? "Servico" : "Aplicacao";
+                        string nomeParaSalvar = (ehServico == DialogResult.Yes)
+                            ? Path.GetFileNameWithoutExtension(nomeArquivo)
+                            : nomeArquivo;
 
-                        if (resultado == DialogResult.Yes) // Roda como ServiÁo
+                        clbServidores.Items.Add(new ServidorItem
                         {
-                            tipo = "Servico";
-                            // Salva o nome SEM o .exe (Ex: "ViasoftServerAgroX")
-                            nomeParaSalvar = Path.GetFileNameWithoutExtension(nomeDoArquivoExe);
-                        }
-                        else // Roda como AplicaÁ„o
-                        {
-                            tipo = "Aplicacao";
-                            // Salva o nome COM o .exe (Ex: "MeuApp.exe")
-                            nomeParaSalvar = nomeDoArquivoExe;
-                        }
-                        // --- FIM DA SUA NOVA IDEIA ---
+                            Nome = nomeParaSalvar,
+                            Tipo = tipo,
+                            ReplicarParaCopia = true,
+                            SubDiretorios = subDiretorioPadrao // Aplica a pasta herdada corretamente
+                        });
 
-                        // Verifica se o nome (de serviÁo ou app) j· existe
-                        bool jaExiste = clbServidores.Items.OfType<ServidorItem>().Any(item => string.Equals(item.Nome, nomeParaSalvar, StringComparison.OrdinalIgnoreCase));
-
-                        if (!jaExiste)
-                        {
-                            // Replicar È SEMPRE true, pois o usu·rio clicou em "Adicionar Exe"
-                            clbServidores.Items.Add(new ServidorItem { Nome = nomeParaSalvar, Tipo = tipo, ReplicarParaCopia = true });
-                            adicionados++;
-                        }
-                        else
-                        {
-                            RegistrarLogCopiarDados($"Item de servidor '{nomeParaSalvar}' j· existe na lista. Ignorando.");
-                        }
+                        adicionados++;
                     }
 
                     if (adicionados > 0)
                     {
-                        RegistrarLogCopiarDados($"{adicionados} aplicaÁ„o(ıes)/serviÁo(s) adicionado(s) ‡ lista.");
                         configuracoesForamAlteradas = true;
                         AtualizarEstadoBotoesConfig();
+                        RegistrarLogCopiarDados($"{adicionados} servidores adicionados. Lembre-se de salvar!");
                     }
                 }
             }
@@ -1783,56 +1822,87 @@ namespace ExeBoard {
                 bool jaExiste = clbServidores.Items.OfType<ServidorItem>().Any(item => string.Equals(item.Nome, nomeDoServico, StringComparison.OrdinalIgnoreCase));
                 if (jaExiste)
                 {
-                    MessageBox.Show($"O item '{nomeDoServico}' j· existe na lista de servidores.", "Item Duplicado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show($"O item '{nomeDoServico}' j√° existe na lista de servidores.", "Item Duplicado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
-                // --- INÕCIO DA CORRE«√O ---
-                // Removemos a pergunta "Deseja replicar?"
-                // Hardcoded para 'false' (Replicar = Nao)
                 bool replicar = false;
-                // --- FIM DA CORRE«√O ---
 
                 clbServidores.Items.Add(new ServidorItem { Nome = nomeDoServico, Tipo = "Servico", ReplicarParaCopia = replicar });
-                RegistrarLogCopiarDados($"ServiÁo '{nomeDoServico}' adicionado ‡ lista de configuraÁ„o.");
+                RegistrarLogCopiarDados($"Servi√ßo '{nomeDoServico}' adicionado √† lista de configura√ß√£o.");
                 configuracoesForamAlteradas = true;
                 AtualizarEstadoBotoesConfig();
             }
         }
         private void btnAdicionarCliente_Click(object sender, EventArgs e)
         {
+            // ... (Bloco de perguntas de ORIGEM/BRANCH continua igual, mantenha o MessageBox Sim/N√£o) ...
+            // Vou resumir para focar na l√≥gica nova:
+
+            string diretorioInicial = "";
+            DialogResult origem = MessageBox.Show(
+                "Deseja buscar o arquivo na pasta de ORIGEM (Branch/Rede)?\n\n" +
+                "‚Ä¢ SIM: Buscar na Origem (Instala√ß√£o Nova)\n" +
+                "‚Ä¢ N√ÉO: Buscar Local (Arquivo j√° existe no PC)",
+                "Selecionar Local", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+
+            if (origem == DialogResult.Cancel) return;
+
+            if (origem == DialogResult.Yes)
+            {
+                diretorioInicial = edtCaminhoBranch.Text;
+                if (string.IsNullOrWhiteSpace(diretorioInicial) || !Directory.Exists(diretorioInicial)) return;
+            }
+            else
+            {
+                string ultimo = LerValorIni("ULTIMOS_CAMINHOS", "UltimoCaminhoAdicionarExe", caminhoIni);
+                diretorioInicial = (!string.IsNullOrEmpty(ultimo) && Directory.Exists(ultimo)) ? ultimo : txtDestinoClientes.Text;
+            }
+
             using (OpenFileDialog dialogo = new OpenFileDialog())
             {
-                dialogo.Title = "Selecione a(s) AplicaÁ„o(ıes) Cliente";
-                dialogo.Filter = "AplicaÁıes (*.exe)|*.exe";
-                dialogo.Multiselect = true;
-
-                string ultimoDiretorio = LerValorIni("ULTIMOS_CAMINHOS", "UltimoCaminhoAdicionarExe", caminhoIni);
-                if (!string.IsNullOrEmpty(ultimoDiretorio) && Directory.Exists(ultimoDiretorio))
-                {
-                    dialogo.InitialDirectory = ultimoDiretorio;
-                }
+                dialogo.Title = "Selecione a(s) Aplica√ß√£o(√µes) Cliente";
+                dialogo.Filter = "Aplica√ß√µes (*.exe)|*.exe";
+                dialogo.Multiselect = true; // Mant√©m sele√ß√£o m√∫ltipla
+                dialogo.InitialDirectory = diretorioInicial;
 
                 if (dialogo.ShowDialog() == DialogResult.OK)
                 {
-                    string novoDiretorio = Path.GetDirectoryName(dialogo.FileName);
-                    WritePrivateProfileString("ULTIMOS_CAMINHOS", "UltimoCaminhoAdicionarExe", novoDiretorio, caminhoIni);
+                    if (origem == DialogResult.No)
+                    {
+                        string novoDiretorio = Path.GetDirectoryName(dialogo.FileNames[0]);
+                        WritePrivateProfileString("ULTIMOS_CAMINHOS", "UltimoCaminhoAdicionarExe", novoDiretorio, caminhoIni);
+                    }
+
+                    // --- A M√ÅGICA ACONTECE AQUI ---
+                    // O sistema varre a lista e o disco para decidir qual √© a pasta padr√£o (ex: "Agro")
+                    string subDiretorioCalculado = DescobrirSubdiretorioPredominante(clbClientes.Items, txtDestinoClientes.Text);
+                    // -----------------------------
+
                     int adicionados = 0;
                     foreach (string caminhoCompleto in dialogo.FileNames)
                     {
                         string nomeDoArquivo = Path.GetFileName(caminhoCompleto);
                         bool jaExiste = clbClientes.Items.OfType<ClienteItem>().Any(item => string.Equals(item.Nome, nomeDoArquivo, StringComparison.OrdinalIgnoreCase));
-                        if (jaExiste)
+
+                        if (jaExiste) continue;
+
+                        var novoCliente = new ClienteItem
                         {
-                            RegistrarLogCopiarDados($"AplicaÁ„o '{nomeDoArquivo}' j· existe na lista. Ignorando.");
-                            continue;
-                        }
-                        clbClientes.Items.Add(new ClienteItem { Nome = nomeDoArquivo, Categoria = "Categoria Padr„o" });
+                            Nome = nomeDoArquivo,
+                            Categoria = "Padr√£o",
+                            SubDiretorios = subDiretorioCalculado // <--- Aplica automaticamente "Agro"
+                        };
+
+                        clbClientes.Items.Add(novoCliente);
                         adicionados++;
+
+                        if (!string.IsNullOrEmpty(subDiretorioCalculado))
+                            RegistrarLogCopiarDados($"Item {nomeDoArquivo} assumiu a pasta: '\\{subDiretorioCalculado}'");
                     }
+
                     if (adicionados > 0)
                     {
-                        RegistrarLogCopiarDados($"{adicionados} aplicaÁ„o(ıes) cliente adicionada(s) ‡ lista de configuraÁ„o.");
                         configuracoesForamAlteradas = true;
                         AtualizarEstadoBotoesConfig();
                     }
@@ -1841,34 +1911,30 @@ namespace ExeBoard {
         }
         private void btnRemoverCliente_Click_1(object sender, EventArgs e)
         {
-            // Lista para guardar as linhas que ser„o removidas
             List<DataGridViewRow> linhasParaRemover = new List<DataGridViewRow>();
 
 
-            // Se o usu·rio selecionou alguma linha para remover
             if (linhasParaRemover.Count > 0)
             {
-                // Pede uma ˙ltima confirmaÁ„o
-                if (MessageBox.Show($"VocÍ tem certeza que deseja remover {linhasParaRemover.Count} cliente(s)?",
-                                      "Confirmar RemoÁ„o",
+                if (MessageBox.Show($"Voc√™ tem certeza que deseja remover {linhasParaRemover.Count} cliente(s)?",
+                                      "Confirmar Remo√ß√£o",
                                       MessageBoxButtons.YesNo,
                                       MessageBoxIcon.Warning) == DialogResult.Yes)
                 {
                     configuracoesForamAlteradas = true;
-                    RegistrarLogCopiarDados($"{linhasParaRemover.Count} cliente(s) removidos da lista de configuraÁ„o.");
+                    RegistrarLogCopiarDados($"{linhasParaRemover.Count} cliente(s) removidos da lista de configura√ß√£o.");
                 }
             }
             else
             {
-                MessageBox.Show("Nenhum item foi selecionado para remoÁ„o.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Nenhum item foi selecionado para remo√ß√£o.", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
         private void button2_Click_3(object sender, EventArgs e)
         {
-            // Apenas recarrega os dados do arquivo .ini, descartando quaisquer alteraÁıes
             CarregarDadosDeConfiguracao();
-            RegistrarLogCopiarDados("AlteraÁıes nas configuraÁıes foram canceladas.");
+            RegistrarLogCopiarDados("Altera√ß√µes nas configura√ß√µes foram canceladas.");
 
         }
 
@@ -1877,26 +1943,24 @@ namespace ExeBoard {
         {
             if (e.TabPage == tabConfiguracoes && configuracoesForamAlteradas)
             {
-                // VOLTAMOS A USAR O MESSAGEBOX PADR√O
                 DialogResult resultado = MessageBox.Show(
-                    "VocÍ possui alteraÁıes n„o salvas. Deseja salv·-las antes de sair?",
-                    "AlteraÁıes Pendentes",
+                    "Voc√™ possui altera√ß√µes n√£o salvas. Deseja salv√°-las antes de sair?",
+                    "Altera√ß√µes Pendentes",
                     MessageBoxButtons.YesNoCancel,
                     MessageBoxIcon.Question
                 );
 
-                // O switch continua funcionando perfeitamente
                 switch (resultado)
                 {
-                    case DialogResult.Yes: // Usu·rio clicou em "Sim" (Salvar)
+                    case DialogResult.Yes:
                         btnSalvarConfiguracoes_Click(null, null);
                         break;
 
-                    case DialogResult.No: // Usu·rio clicou em "N„o" (N„o Salvar)
+                    case DialogResult.No:
                         CarregarDadosDeConfiguracao();
                         break;
 
-                    case DialogResult.Cancel: // Usu·rio clicou em "Cancelar"
+                    case DialogResult.Cancel:
                         e.Cancel = true;
                         break;
                 }
@@ -1904,27 +1968,21 @@ namespace ExeBoard {
         }
         private void clb_ItemCheck(object sender, ItemCheckEventArgs e)
         {
-            // A trava foi removida. Agora ele apenas atualiza o estado dos botıes apÛs o clique.
             this.BeginInvoke((System.Windows.Forms.MethodInvoker)delegate { AtualizarEstadoBotoesConfig(); });
         }
 
         private void tsmMarcarDesmarcarTodos_Click(object sender, EventArgs e)
         {
-            // Pega o item de menu que foi clicado (o "Marcar/Desmarcar Todos")
             ToolStripMenuItem menuItem = sender as ToolStripMenuItem;
             if (menuItem == null) return;
 
-            // A partir do item, descobre qual ContextMenuStrip È o "dono" dele
             ContextMenuStrip contextMenu = menuItem.Owner as ContextMenuStrip;
             if (contextMenu == null) return;
 
-            // AGORA SIM: Pergunta diretamente ao menu qual controle o abriu
             CheckedListBox listBox = contextMenu.SourceControl as CheckedListBox;
 
-            // Se o controle encontrado for de fato um CheckedListBox...
             if (listBox != null)
             {
-                // A partir daqui, a nossa lÛgica inteligente continua a mesma e vai funcionar!
                 bool deveMarcar = (listBox.CheckedItems.Count == 0);
 
                 for (int i = 0; i < listBox.Items.Count; i++)
@@ -1937,12 +1995,12 @@ namespace ExeBoard {
         private void Placeholder_Enter(object sender, EventArgs e)
         {
             TextBox txt = sender as TextBox;
-            string placeholder = "Informe o caminho da pasta aqui"; // Mantenha este texto igual ao que vocÍ colocou no Design
+            string placeholder = "Informe o caminho da pasta aqui";
 
             if (txt != null && txt.Text == placeholder && txt.ForeColor == SystemColors.GrayText)
             {
                 txt.Text = "";
-                txt.ForeColor = SystemColors.WindowText; // Cor normal do texto
+                txt.ForeColor = SystemColors.WindowText;
             }
         }
 
@@ -1954,7 +2012,7 @@ namespace ExeBoard {
             if (txt != null && string.IsNullOrWhiteSpace(txt.Text))
             {
                 txt.Text = placeholder;
-                txt.ForeColor = SystemColors.GrayText; // Cor cinza do placeholder
+                txt.ForeColor = SystemColors.GrayText;
             }
         }
 
@@ -1962,52 +2020,62 @@ namespace ExeBoard {
         {
             using (FolderBrowserDialog dialogo = new FolderBrowserDialog())
             {
-                dialogo.Description = "Selecione o diretÛrio de destino para Atualizadores";
+                dialogo.Description = "Selecione o diret√≥rio de destino para Atualizadores";
                 dialogo.ShowNewFolderButton = true;
-                string ultimoCaminho = LerValorIni("ULTIMOS_CAMINHOS", "UltimoCaminhoAtualizadores", caminhoIni);
-                if (!string.IsNullOrEmpty(ultimoCaminho) && Directory.Exists(ultimoCaminho))
+
+                string caminhoInicial = txtDestinoAtualizadores.Text;
+                string placeholder = "Informe o caminho da pasta aqui";
+
+                if (string.IsNullOrWhiteSpace(caminhoInicial) || caminhoInicial == placeholder)
                 {
-                    dialogo.SelectedPath = ultimoCaminho;
+                    caminhoInicial = LerValorIni("ULTIMOS_CAMINHOS", "UltimoCaminhoAtualizadores", caminhoIni);
                 }
 
-                else
+                while (!string.IsNullOrEmpty(caminhoInicial) && !Directory.Exists(caminhoInicial))
                 {
-                    // SÛ define o caminho se o texto N√O for o placeholder E se o caminho existir
-                    if (txtDestinoAtualizadores.Text != "Informe o caminho da pasta aqui" && Directory.Exists(txtDestinoAtualizadores.Text))
-                    {
-                        dialogo.SelectedPath = txtDestinoAtualizadores.Text;
-                    }
+                    caminhoInicial = Path.GetDirectoryName(caminhoInicial);
+                }
+
+                if (!string.IsNullOrEmpty(caminhoInicial))
+                {
+                    dialogo.InitialDirectory = caminhoInicial;
                 }
 
                 if (dialogo.ShowDialog() == DialogResult.OK)
                 {
                     txtDestinoAtualizadores.Text = dialogo.SelectedPath;
-                    // ForÁa a saÌda do placeholder visualmente
                     txtDestinoAtualizadores.ForeColor = SystemColors.WindowText;
                     WritePrivateProfileString("ULTIMOS_CAMINHOS", "UltimoCaminhoAtualizadores", dialogo.SelectedPath, caminhoIni);
-                    // Salva tambÈm na seÁ„o [CAMINHOS] para compatibilidade com a lÛgica de cÛpia atual?
-                    WritePrivateProfileString("CAMINHOS", "PASTA_DADOS", dialogo.SelectedPath, caminhoIni); // VERIFICAR SE ISSO … NECESS¡RIO
+                    WritePrivateProfileString("CAMINHOS", "PASTA_DADOS", dialogo.SelectedPath, caminhoIni);
                 }
             }
         }
-
         private void btnProcurarClientes_Click(object sender, EventArgs e)
         {
             using (FolderBrowserDialog dialogo = new FolderBrowserDialog())
             {
-                dialogo.Description = "Selecione o diretÛrio de destino para Clientes";
+                dialogo.Description = "Selecione o diret√≥rio de destino para Clientes";
                 dialogo.ShowNewFolderButton = true;
-                string ultimoCaminho = LerValorIni("ULTIMOS_CAMINHOS", "UltimoCaminhoClientes", caminhoIni);
-                if (!string.IsNullOrEmpty(ultimoCaminho) && Directory.Exists(ultimoCaminho))
+
+                string caminhoInicial = txtDestinoClientes.Text;
+                string placeholder = "Informe o caminho da pasta aqui";
+
+                // Se for o placeholder ou vazio, tenta pegar do INI
+                if (string.IsNullOrWhiteSpace(caminhoInicial) || caminhoInicial == placeholder)
                 {
-                    dialogo.SelectedPath = ultimoCaminho;
+                    caminhoInicial = LerValorIni("ULTIMOS_CAMINHOS", "UltimoCaminhoClientes", caminhoIni);
                 }
-                else
+
+                // Garante que o caminho (ou um pai dele) exista
+                while (!string.IsNullOrEmpty(caminhoInicial) && !Directory.Exists(caminhoInicial))
                 {
-                    if (txtDestinoClientes.Text != "Informe o caminho da pasta aqui" && Directory.Exists(txtDestinoClientes.Text))
-                    {
-                        dialogo.SelectedPath = txtDestinoClientes.Text;
-                    }
+                    caminhoInicial = Path.GetDirectoryName(caminhoInicial);
+                }
+
+                // Define o diret√≥rio inicial para ENTRAR na pasta
+                if (!string.IsNullOrEmpty(caminhoInicial))
+                {
+                    dialogo.InitialDirectory = caminhoInicial;
                 }
 
                 if (dialogo.ShowDialog() == DialogResult.OK)
@@ -2015,49 +2083,51 @@ namespace ExeBoard {
                     txtDestinoClientes.Text = dialogo.SelectedPath;
                     txtDestinoClientes.ForeColor = SystemColors.WindowText;
                     WritePrivateProfileString("ULTIMOS_CAMINHOS", "UltimoCaminhoClientes", dialogo.SelectedPath, caminhoIni);
-                    WritePrivateProfileString("CAMINHOS", "PASTA_CLIENT", dialogo.SelectedPath, caminhoIni); // VERIFICAR
+                    WritePrivateProfileString("CAMINHOS", "PASTA_CLIENT", dialogo.SelectedPath, caminhoIni);
                 }
             }
         }
-
         private void btnProcurarServidores_Click(object sender, EventArgs e)
         {
             using (FolderBrowserDialog dialogo = new FolderBrowserDialog())
             {
-                dialogo.Description = "Selecione o diretÛrio de destino para Servidores";
+                dialogo.Description = "Selecione o diret√≥rio de destino para Servidores";
                 dialogo.ShowNewFolderButton = true;
-                string ultimoCaminho = LerValorIni("ULTIMOS_CAMINHOS", "UltimoCaminhoServidores", caminhoIni);
-                if (!string.IsNullOrEmpty(ultimoCaminho) && Directory.Exists(ultimoCaminho))
+
+                string caminhoInicial = txtDestinoServidores.Text;
+                string placeholder = "Informe o caminho da pasta aqui";
+
+                if (string.IsNullOrWhiteSpace(caminhoInicial) || caminhoInicial == placeholder)
                 {
-                    dialogo.SelectedPath = ultimoCaminho;
+                    caminhoInicial = LerValorIni("ULTIMOS_CAMINHOS", "UltimoCaminhoServidores", caminhoIni);
                 }
-                else
+
+                while (!string.IsNullOrEmpty(caminhoInicial) && !Directory.Exists(caminhoInicial))
                 {
-                    if (txtDestinoServidores.Text != "Informe o caminho da pasta aqui" && Directory.Exists(txtDestinoServidores.Text))
-                    {
-                        dialogo.SelectedPath = txtDestinoServidores.Text;
-                    }
+                    caminhoInicial = Path.GetDirectoryName(caminhoInicial);
                 }
+
+                if (!string.IsNullOrEmpty(caminhoInicial))
+                {
+                    dialogo.InitialDirectory = caminhoInicial;
+                }
+
                 if (dialogo.ShowDialog() == DialogResult.OK)
                 {
                     txtDestinoServidores.Text = dialogo.SelectedPath;
                     txtDestinoServidores.ForeColor = SystemColors.WindowText;
                     WritePrivateProfileString("ULTIMOS_CAMINHOS", "UltimoCaminhoServidores", dialogo.SelectedPath, caminhoIni);
-                    WritePrivateProfileString("CAMINHOS", "PASTA_SERVER", dialogo.SelectedPath, caminhoIni); // VERIFICAR
+                    WritePrivateProfileString("CAMINHOS", "PASTA_SERVER", dialogo.SelectedPath, caminhoIni);
                 }
             }
         }
-
         private void btnAdicionarAtualizador_Click(object sender, EventArgs e)
         {
             using (FolderBrowserDialog dialogo = new FolderBrowserDialog())
             {
-                // --- 1. MENSAGEM CORRIGIDA (conforme sua imagem) ---
                 dialogo.Description = "Selecione a pasta do Atualizador (ex: Firebird, Oracle)";
                 dialogo.ShowNewFolderButton = false;
 
-                // --- 2. L”GICA DE SALVAR/CARREGAR CAMINHO (conforme sua imagem) ---
-                // Tenta carregar o *˙ltimo* caminho salvo para esta janela especÌfica
                 string ultimoCaminho = LerValorIni("ULTIMOS_CAMINHOS", "UltimoCaminhoPastaAtualizador", caminhoIni);
 
                 if (!string.IsNullOrEmpty(ultimoCaminho) && Directory.Exists(ultimoCaminho))
@@ -2066,9 +2136,8 @@ namespace ExeBoard {
                 }
                 else
                 {
-                    // Fallback: Tenta abrir na pasta BD dentro da Branch
-                    string caminhoBranch = edtCaminhoBranch.Text; //
-                    string dePastaDados = LerValorIni("CAMINHOS", "DE_PASTA_DADOS", caminhoIni); //
+                    string caminhoBranch = edtCaminhoBranch.Text;
+                    string dePastaDados = LerValorIni("CAMINHOS", "DE_PASTA_DADOS", caminhoIni);
                     string caminhoPadrao = Path.Combine(caminhoBranch, dePastaDados);
 
                     if (Directory.Exists(caminhoPadrao))
@@ -2083,24 +2152,21 @@ namespace ExeBoard {
 
                 if (dialogo.ShowDialog() == DialogResult.OK)
                 {
-                    // Salva o caminho selecionado para a prÛxima vez
                     WritePrivateProfileString("ULTIMOS_CAMINHOS", "UltimoCaminhoPastaAtualizador", dialogo.SelectedPath, caminhoIni);
 
-                    // Pega apenas o NOME da pasta selecionada (ex: "Firebird")
                     string nomePasta = new DirectoryInfo(dialogo.SelectedPath).Name;
 
-                    // O resto da sua lÛgica original continua
                     bool jaExiste = clbAtualizadores.Items.OfType<string>().Any(item => string.Equals(item, nomePasta, StringComparison.OrdinalIgnoreCase));
 
                     if (jaExiste)
                     {
-                        RegistrarLogCopiarDados($"Atualizador '{nomePasta}' j· existe na lista. Ignorando.");
-                        MessageBox.Show($"A pasta '{nomePasta}' j· est· na lista.", "Item Duplicado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        RegistrarLogCopiarDados($"Atualizador '{nomePasta}' j√° existe na lista. Ignorando.");
+                        MessageBox.Show($"A pasta '{nomePasta}' j√° est√° na lista.", "Item Duplicado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     }
                     else
                     {
                         clbAtualizadores.Items.Add(nomePasta);
-                        RegistrarLogCopiarDados($"Pasta de atualizador '{nomePasta}' adicionada ‡ lista de configuraÁ„o.");
+                        RegistrarLogCopiarDados($"Pasta de atualizador '{nomePasta}' adicionada √† lista de configura√ß√£o.");
                         configuracoesForamAlteradas = true;
                         AtualizarEstadoBotoesConfig();
                     }
@@ -2114,55 +2180,161 @@ namespace ExeBoard {
                 DirectoryInfo dir = new DirectoryInfo(sourceDir);
                 if (!dir.Exists)
                 {
-                    throw new DirectoryNotFoundException($"DiretÛrio de origem n„o encontrado: {sourceDir}");
+                    throw new DirectoryNotFoundException($"Diret√≥rio de origem n√£o encontrado: {sourceDir}");
                 }
 
                 if (!Directory.Exists(destDir))
                 {
                     Directory.CreateDirectory(destDir);
-                    RegistrarLogCopiarDados($"Criado diretÛrio: {destDir}", Color.Gray);
+                    RegistrarLogCopiarDados($"Criado diret√≥rio: {destDir}", Color.Gray);
                 }
 
-                // Copia os arquivos
                 foreach (FileInfo file in dir.GetFiles())
                 {
                     string tempPath = Path.Combine(destDir, file.Name);
                     file.CopyTo(tempPath, true);
                 }
 
-                // Copia os subdiretÛrios recursivamente
                 foreach (DirectoryInfo subdir in dir.GetDirectories())
                 {
                     string tempPath = Path.Combine(destDir, subdir.Name);
                     CopiarDiretorioComLog(subdir.FullName, tempPath, subdir.Name);
                 }
 
-                // --- CORRE«√O: LOG VERDE ---
                 RegistrarLogCopiarDados($"OK: Pasta {nomePasta} copiada para {destDir}", Color.DarkGreen);
             }
             catch (Exception ex)
             {
-                // --- CORRE«√O: LOG VERMELHO ---
                 RegistrarLogCopiarDados($"ERRO ao copiar a pasta {nomePasta}: {ex.Message}", Color.Red);
             }
         }
 
         private void btnFiltrarErros_Click(object sender, EventArgs e)
         {
-            // Mostra apenas logs vermelhos (erros)
             RepopularLogs(Color.Red);
         }
 
         private void btnFiltrarSucesso_Click(object sender, EventArgs e)
         {
-            // Mostra apenas logs verdes (sucesso)
             RepopularLogs(Color.DarkGreen);
         }
 
         private void btnMostrarTodos_Click(object sender, EventArgs e)
         {
-            // Mostra todos os logs (sem filtro)
             RepopularLogs(null);
+        }
+
+        private void SalvarCaminhosDaTela()
+        {
+            string placeholder = "Informe o caminho da pasta aqui";
+
+            // 1. Salvar caminho da Branch (Origem)
+            if (!string.IsNullOrWhiteSpace(edtCaminhoBranch.Text))
+            {
+                WritePrivateProfileString("CAMINHOS", "DE", edtCaminhoBranch.Text, caminhoIni);
+            }
+
+            // 2. Salvar caminho dos Atualizadores (Destino)
+            if (!string.IsNullOrWhiteSpace(txtDestinoAtualizadores.Text) && txtDestinoAtualizadores.Text != placeholder)
+            {
+                WritePrivateProfileString("CAMINHOS", "PASTA_DADOS", txtDestinoAtualizadores.Text, caminhoIni);
+                WritePrivateProfileString("ULTIMOS_CAMINHOS", "UltimoCaminhoAtualizadores", txtDestinoAtualizadores.Text, caminhoIni);
+            }
+
+            // 3. Salvar caminho dos Clientes (Destino)
+            if (!string.IsNullOrWhiteSpace(txtDestinoClientes.Text) && txtDestinoClientes.Text != placeholder)
+            {
+                WritePrivateProfileString("CAMINHOS", "PASTA_CLIENT", txtDestinoClientes.Text, caminhoIni);
+                WritePrivateProfileString("ULTIMOS_CAMINHOS", "UltimoCaminhoClientes", txtDestinoClientes.Text, caminhoIni);
+            }
+
+            // 4. Salvar caminho dos Servidores (Destino)
+            if (!string.IsNullOrWhiteSpace(txtDestinoServidores.Text) && txtDestinoServidores.Text != placeholder)
+            {
+                WritePrivateProfileString("CAMINHOS", "PASTA_SERVER", txtDestinoServidores.Text, caminhoIni);
+                WritePrivateProfileString("ULTIMOS_CAMINHOS", "UltimoCaminhoServidores", txtDestinoServidores.Text, caminhoIni);
+            }
+        }
+
+        // --- NOVO M√âTODO: Gerencia o padr√£o sem criar pastas invasivas ---
+        private void ConfigurarCaminhosPadraoSeVazio(TextBox txt, string caminhoPadrao, string chaveIni, string chaveUltimo)
+        {
+            string valorIni = LerValorIni("CAMINHOS", chaveIni, caminhoIni);
+            string placeholder = "Informe o caminho da pasta aqui";
+
+            // Se no INI estiver vazio ou for o placeholder, sugere o padr√£o (Ex: C:\Viasoft\Dados)
+            // Se o usu√°rio j√° salvou algo antes, respeita o que ele salvou.
+            if (string.IsNullOrWhiteSpace(valorIni) || valorIni == placeholder)
+            {
+                txt.Text = caminhoPadrao;
+            }
+            else
+            {
+                txt.Text = valorIni;
+            }
+
+            txt.ForeColor = SystemColors.WindowText;
+        }
+
+        // --- NOVO M√âTODO: Descobre qual √© a pasta predominante (Efeito Manada Inteligente) ---
+        private string DescobrirSubdiretorioPredominante(System.Windows.Forms.ListBox.ObjectCollection itens, string raizDestino)
+        {
+            // Dicion√°rio para contar: "NomeDaPasta" -> Quantidade de vezes que aparece
+            Dictionary<string, int> contagemPastas = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var item in itens)
+            {
+                string subDir = "";
+                string nomeArquivo = "";
+
+                // Identifica se √© Cliente ou Servidor para pegar as propriedades
+                if (item is ClienteItem c) { subDir = c.SubDiretorios; nomeArquivo = c.Nome; }
+                else if (item is ServidorItem s) { subDir = s.SubDiretorios; nomeArquivo = s.Nome; }
+
+                // 1. Se j√° est√° configurado no INI, usa essa informa√ß√£o
+                if (!string.IsNullOrEmpty(subDir))
+                {
+                    if (!contagemPastas.ContainsKey(subDir)) contagemPastas[subDir] = 0;
+                    contagemPastas[subDir]++;
+                }
+                else
+                {
+                    // 2. Se N√ÉO est√° no INI (est√° vazio), tenta achar no DISCO F√çSICO agora
+                    if (Directory.Exists(raizDestino))
+                    {
+                        try
+                        {
+                            // Procura o arquivo em todas as subpastas
+                            string[] encontrados = Directory.GetFiles(raizDestino, nomeArquivo, SearchOption.AllDirectories);
+
+                            if (encontrados.Length > 0)
+                            {
+                                // Achou! Vamos calcular a pasta relativa
+                                string pastaCompleta = Path.GetDirectoryName(encontrados[0]);
+
+                                // Se "C:\Viasoft\Client\Agro" come√ßa com "C:\Viasoft\Client"
+                                if (pastaCompleta.StartsWith(raizDestino, StringComparison.OrdinalIgnoreCase) && pastaCompleta.Length > raizDestino.Length)
+                                {
+                                    string resto = pastaCompleta.Substring(raizDestino.Length);
+                                    // Limpa as barras para sobrar s√≥ "Agro"
+                                    string pastaDetectada = resto.Trim(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                                    if (!string.IsNullOrEmpty(pastaDetectada))
+                                    {
+                                        if (!contagemPastas.ContainsKey(pastaDetectada)) contagemPastas[pastaDetectada] = 0;
+                                        contagemPastas[pastaDetectada]++;
+                                    }
+                                }
+                            }
+                        }
+                        catch { /* Ignora erros de permiss√£o */ }
+                    }
+                }
+            }
+
+            // Retorna a pasta que apareceu mais vezes (Moda Estat√≠stica)
+            // Se n√£o achou nada, retorna vazio (Raiz)
+            return contagemPastas.OrderByDescending(x => x.Value).Select(x => x.Key).FirstOrDefault() ?? "";
         }
     }
 }
