@@ -1884,10 +1884,8 @@ namespace ExeBoard
                         WritePrivateProfileString("ULTIMOS_CAMINHOS", "UltimoCaminhoAdicionarServidor", Path.GetDirectoryName(dialogo.FileNames[0]), caminhoIni);
                     }
 
-                    // --- CORREÇÃO DA HERANÇA DE PASTA ---
+                    // --- LÓGICA DE HERANÇA DE PASTA ---
                     string subDiretorioPadrao = "";
-
-                    // MUDANÇA: Procura o primeiro que NÃO SEJA vazio
                     var itemComPasta = clbServidores.Items.OfType<ServidorItem>()
                                         .FirstOrDefault(s => !string.IsNullOrEmpty(s.SubDiretorios));
 
@@ -1895,38 +1893,60 @@ namespace ExeBoard
                     {
                         subDiretorioPadrao = itemComPasta.SubDiretorios;
                     }
-                    // ------------------------------------
+
+                    // --- MELHORIA: PRÉ-CARREGA A LISTA DE SERVIÇOS DO WINDOWS ---
+                    // Isso evita perguntar pro usuário se o arquivo já for um serviço conhecido
+                    var servicosInstalados = ServiceController.GetServices()
+                                             .Select(s => s.ServiceName)
+                                             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                     int adicionados = 0;
                     foreach (string caminhoCompleto in dialogo.FileNames)
                     {
                         string nomeArquivo = Path.GetFileName(caminhoCompleto);
+                        string nomeSemExtensao = Path.GetFileNameWithoutExtension(nomeArquivo);
 
                         bool jaExiste = clbServidores.Items.OfType<ServidorItem>()
-                            .Any(x => x.Nome.Equals(Path.GetFileNameWithoutExtension(nomeArquivo), StringComparison.OrdinalIgnoreCase)
+                            .Any(x => x.Nome.Equals(nomeSemExtensao, StringComparison.OrdinalIgnoreCase)
                                    || x.Nome.Equals(nomeArquivo, StringComparison.OrdinalIgnoreCase));
 
                         if (jaExiste) continue;
 
-                        DialogResult ehServico = MessageBox.Show(
-                            $"O arquivo '{nomeArquivo}' roda como um Serviço do Windows?\n\n" +
-                            "• SIM = Serviço (ViasoftServerAgroX)\n" +
-                            "• NÃO = Aplicação Comum (.exe)",
-                            "Tipo de Servidor",
-                            MessageBoxButtons.YesNo,
-                            MessageBoxIcon.Question);
+                        // LÓGICA INTELIGENTE DE DETECÇÃO
+                        string tipo = "Aplicacao";
+                        bool perguntarAoUsuario = true;
 
-                        string tipo = (ehServico == DialogResult.Yes) ? "Servico" : "Aplicacao";
-                        string nomeParaSalvar = (ehServico == DialogResult.Yes)
-                            ? Path.GetFileNameWithoutExtension(nomeArquivo)
-                            : nomeArquivo;
+                        // 1. Se o nome do arquivo bate com um serviço instalado, é Serviço!
+                        if (servicosInstalados.Contains(nomeSemExtensao))
+                        {
+                            tipo = "Servico";
+                            perguntarAoUsuario = false; // Não incomoda o usuário
+                            RegistrarLogCopiarDados($"Detectado automaticamente: {nomeSemExtensao} é um Serviço do Windows.");
+                        }
+
+                        // 2. Se não detectou, pergunta (mas só para este arquivo específico)
+                        if (perguntarAoUsuario)
+                        {
+                            DialogResult ehServico = MessageBox.Show(
+                                $"O arquivo '{nomeArquivo}' não foi identificado automaticamente como Serviço.\n\n" +
+                                "Como ele deve ser tratado?\n" +
+                                "• SIM = É um Serviço (ViasoftServer...)\n" +
+                                "• NÃO = É uma Aplicação Comum (.exe)",
+                                "Definir Tipo",
+                                MessageBoxButtons.YesNo,
+                                MessageBoxIcon.Question);
+
+                            tipo = (ehServico == DialogResult.Yes) ? "Servico" : "Aplicacao";
+                        }
+
+                        string nomeParaSalvar = (tipo == "Servico") ? nomeSemExtensao : nomeArquivo;
 
                         clbServidores.Items.Add(new ServidorItem
                         {
                             Nome = nomeParaSalvar,
                             Tipo = tipo,
                             ReplicarParaCopia = true,
-                            SubDiretorios = subDiretorioPadrao // Aplica a pasta herdada corretamente
+                            SubDiretorios = subDiretorioPadrao
                         });
 
                         adicionados++;
